@@ -1,0 +1,15 @@
+README.md
+setup.py
+kkannotation/__init__.py
+kkannotation/coco.py
+kkannotation/labelme.py
+kkannotation/streamer.py
+kkannotation.egg-info/PKG-INFO
+kkannotation.egg-info/SOURCES.txt
+kkannotation.egg-info/dependency_links.txt
+kkannotation.egg-info/requires.txt
+kkannotation.egg-info/top_level.txt
+kkannotation/util/__init__.py
+kkannotation/util/com.py
+kkannotation/util/image.py
+kkannotation/util/logger.py

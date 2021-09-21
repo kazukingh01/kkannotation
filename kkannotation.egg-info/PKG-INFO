@@ -1,0 +1,17 @@
+Metadata-Version: 2.1
+Name: kkannotation
+Version: 1.0.0
+Summary: my annotation library.
+Home-page: https://github.com/kazukingh01/kkannotation
+Author: kazuking
+Author-email: kazukingh01@gmail.com
+License: Public License
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: Private License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+
+# kkannotation
+

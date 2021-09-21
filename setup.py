@@ -25,6 +25,12 @@ setup(
         "Operating System :: OS Independent",
     ],
     install_requires=[
+        'numpy>=1.21.2',
+        'opencv-python>=4.5.3.56',
+        'pandas>=1.3.3',
+        'python-dateutil>=2.8.2',
+        'pytz>=2021.1',
+        'six>=1.16.0',
     ],
     python_requires='>=3.7'
 )
