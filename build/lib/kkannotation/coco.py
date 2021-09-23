@@ -6,7 +6,7 @@ from typing import List, Union
 
 # local package
 from kkannotation.util.image import draw_annotation
-from kkannotation.util.com import check_type, check_type_list, correct_dirpath, makedirs, get_file_list
+from kkannotation.util.com import check_type, check_type_list, correct_dirpath, makedirs
 from kkannotation.util.logger import set_logger
 logger = set_logger(__name__)
 
@@ -495,6 +495,45 @@ class CocoManager:
             cv2.waitKey(0)
         return img
     
+    def output_labelme_files(self, outdir: str, root_dir: str=None, exist_ok: bool=False, remake: bool=False):
+        outdir = correct_dirpath(outdir)
+        if root_dir is not None: root_dir = correct_dirpath(root_dir)
+        makedirs(outdir, exist_ok=exist_ok, remake=remake)
+        for i in range(len(self)):
+            df = self[i]
+            out_filename = ".".join(df["images_file_name"].iloc[0].split(".")[:-1]) + ".json"
+            path_image   = df["images_coco_url"].iloc[0] if root_dir is None else root_dir + df["images_file_name"].iloc[0]
+            dict_labelme = {
+                "version": "1.0.0", "flags": {}, "shapes": [],
+                "imagePath": path_image, "imageData": None,
+                "imageHeight": int(df["images_height"].iloc[0]),
+                "imageWidth" : int(df["images_width"].iloc[0]),
+            }
+            for j in range(df.shape[0]):
+                se = df.iloc[j]
+                dictwk = {"label": str(se["categories_name"]), "group_id": None, "flags": {}}
+                if len(se["annotations_segmentation"]) > 0:
+                    # segmentation
+                    dictwk["shape_type"] = "polygon"
+                    dictwk["points"] = np.array(se["annotations_segmentation"]).reshape(-1, 2).astype(np.int32).tolist()
+                else:
+                    # bbox
+                    x_min, y_min, width, height = [int(x) for x in se["annotations_bbox"]]
+                    dictwk["shape_type"] = "rectangle"
+                    dictwk["points"] = [[x_min, y_min], [x_min + width, y_min + height]]
+                dict_labelme["shapes"].append(dictwk)
+                if len(se["categories_keypoints"]) > 0:
+                    # keypoint
+                    ndf = np.array(se["annotations_keypoints"]).reshape(-1, 3)
+                    for id_key, (x, y, v) in enumerate(ndf):
+                        if v > 0:
+                            dictwk = {"label": str(se["annotations_keypoints"][id_key]), "group_id": None, "flags": {}}
+                            dictwk["shape_type"] = "point"
+                            dictwk["points"] = [x, y]
+                            dict_labelme["shapes"].append(dictwk)
+            with open(outdir + out_filename, 'w') as f:
+                json.dump(dict_labelme, f)
+
     def save_draw_annotations(self, outdir: str, imgpath: str=None, is_draw_name: bool=False, exist_ok: bool=False, remake: bool=False):
         outdir = correct_dirpath(outdir)
         makedirs(outdir, exist_ok=exist_ok, remake=remake)

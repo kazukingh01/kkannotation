@@ -83,14 +83,14 @@ class Streamer:
             if cv2.waitKey(30) & 0xff == 27: # quit with ESQ key
                 break
 
-    def save_images(self, outdir: str, step: int = 1, max_images: int=None):
+    def save_images(self, outdir: str, step: int = 1, max_images: int=None, exist_ok: bool=False, remake: bool=False):
         assert isinstance(step, int) and step > 0
         if max_images is not None:
             assert isinstance(max_images, int) and max_images > 0
         outdir = correct_dirpath(outdir)
         bname  = os.path.basename(self.src) if isinstance(self.src, str) else f"camera{self.src}"
         count  = 0
-        makedirs(outdir, exist_ok=True, remake=False)
+        makedirs(outdir, exist_ok=exist_ok, remake=remake)
         for i, frame in enumerate(self):
             if i % step == 0:
                 filename = f"{outdir}{bname}.{i}.png"
