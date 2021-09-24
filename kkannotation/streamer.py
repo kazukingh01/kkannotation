@@ -90,10 +90,11 @@ class Streamer:
         outdir = correct_dirpath(outdir)
         bname  = os.path.basename(self.src) if isinstance(self.src, str) else f"camera{self.src}"
         count  = 0
+        maxlen = int(np.log10(len(self))) + 1
         makedirs(outdir, exist_ok=exist_ok, remake=remake)
         for i, frame in enumerate(self):
             if i % step == 0:
-                filename = f"{outdir}{bname}.{i}.png"
+                filename = f"{outdir}{bname}.{str(i).zfill(maxlen)}.png"
                 cv2.imwrite(filename, frame)
                 count += 1
                 if max_images is not None and count > max_images:
