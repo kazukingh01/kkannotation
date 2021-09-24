@@ -68,6 +68,7 @@ class Labelme2Coco:
         # labelme json to dataframe
         df = pd.DataFrame()
         df_json = pd.DataFrame(fjson["shapes"])
+        if (df_json.columns == "shape_type").sum() == 0: return pd.DataFrame()
         for i, (label, points, shape_type) in enumerate(df_json[df_json["shape_type"].isin(["polygon","rectangle"])][["label","points","shape_type"]].values):
             if self.index_categories_name.get(label) is None: continue
             x1, y1, x2, y2 = None, None, None, None
