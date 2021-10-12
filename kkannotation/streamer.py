@@ -82,6 +82,16 @@ class Streamer:
             cv2.imshow('__window', frame)
             if cv2.waitKey(30) & 0xff == 27: # quit with ESQ key
                 break
+    
+    def save_image(self, outdir: str, index: int, filename: str=None, exist_ok: bool=True):
+        outdir = correct_dirpath(outdir)
+        if filename is None:
+            bname  = os.path.basename(self.src) if isinstance(self.src, str) else f"camera{self.src}"
+            maxlen = int(np.log10(len(self))) + 1
+            makedirs(outdir, exist_ok=exist_ok, remake=False)
+            filename = f"{outdir}{bname}.{str(index).zfill(maxlen)}.png"
+        frame = self[index]
+        cv2.imwrite(filename, frame)
 
     def save_images(self, outdir: str, step: int = 1, max_images: int=None, exist_ok: bool=False, remake: bool=False):
         assert isinstance(step, int) and step > 0
