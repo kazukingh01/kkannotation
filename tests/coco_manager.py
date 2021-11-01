@@ -4,7 +4,7 @@ from kkannotation.coco import CocoManager
 if __name__ == "__main__":
     coco = CocoManager()
     coco.add_json("./coco.json", root_dir="./img/")
-    coco.draw_annotations(0)
+    coco.draw_annotations(0, is_draw_name=True, is_show=True)
     """
     >>> coco[0]
     images_id        images_coco_url images_date_captured images_file_name  ...                categories_keypoints  categories_name  categories_skeleton  categories_supercategory

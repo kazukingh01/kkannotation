@@ -52,7 +52,7 @@ class CocoManager:
         >>> coco.draw_annotations(0)
     """
 
-    def __init__(self):
+    def __init__(self, src: Union[str, dict]=None, root_dir: str=None):
         self.df_json    = pd.DataFrame()
         self.json       = {} # Save the most recent one
         self.coco_info  = {}
@@ -62,6 +62,8 @@ class CocoManager:
         self._dict_cat     = {}
         self._list_se      = []
         self.initialize()
+        if src is not None:
+            self.add_json(src=src, root_dir=root_dir)
     
     def __len__(self):
         return len(self.df_json["images_coco_url"].unique())
@@ -118,10 +120,10 @@ class CocoManager:
     @classmethod
     def to_series(
         cls, imgpath: str, height: int, width: int, 
-        bbox: (float, float, float, float),
+        bbox: (Union[int, float], Union[int, float], Union[int, float], Union[int, float]),
         image_id: int, annotation_id: int, category_id: int,
         category_name: str, super_category_name: str=None,
-        segmentations: List[List[float]]=None, area: float=None,
+        segmentations: List[List[Union[int, float]]]=None, area: float=None,
         keypoints: List[float]=None,
         category_name_kpts: List[str]=None,
     ) -> pd.Series:
@@ -140,16 +142,21 @@ class CocoManager:
         assert isinstance(imgpath, str)
         assert isinstance(height, int) and height > 0
         assert isinstance(width, int) and width > 0
-        assert check_type_list(bbox, int) and sum([(x >= 0) for x in bbox]) == 4
+        assert check_type_list(bbox, [int, float]) and sum([(x >= 0) for x in bbox]) == 4
         assert isinstance(image_id, int) and image_id >= 0
         assert isinstance(annotation_id, int) and annotation_id >= 0
         assert isinstance(category_id, int) and category_id >= 0
         assert isinstance(category_name, str)
         if super_category_name is not None: assert isinstance(super_category_name, str)
-        if segmentations       is not None: assert check_type_list(segmentations, list, [int, float])
         if area                is not None: assert check_type(area, [int, float]) and area > 0
-        if keypoints           is not None: assert check_type_list(keypoints, float)
         if category_name_kpts  is not None: assert check_type_list(category_name_kpts, str)
+        if keypoints           is not None:
+            assert check_type_list(keypoints, float)
+            assert len(category_name_kpts) == (len(keypoints) // 3)
+            keypoints = [round(x, 2) for x in keypoints]
+        if segmentations       is not None:
+            assert check_type_list(segmentations, list, [int, float])
+            segmentations = [[round(x, 1) for x in y] for y in segmentations]
         se = pd.Series(dtype=object)
         se["images_id"]                 = image_id
         se["images_file_name"]          = os.path.basename(imgpath)
@@ -160,8 +167,8 @@ class CocoManager:
         se["images_width"]              = width
         se["images_license"]            = 0
         se["annotations_id"]            = annotation_id
-        se["annotations_bbox"]          = list(bbox)
-        se["annotations_area"]          = int(se["annotations_bbox"][-2] * se["annotations_bbox"][-1]) if area is None else area
+        se["annotations_bbox"]          = [round(x, 2) for x in bbox]
+        se["annotations_area"]          = int(se["annotations_bbox"][-2] * se["annotations_bbox"][-1]) if area is None else round(area, 2)
         se["annotations_category_id"]   = category_id
         se["annotations_image_id"]      = image_id
         se["annotations_iscrowd"]       = 0
@@ -429,7 +436,7 @@ class CocoManager:
         self.re_index()
 
     @classmethod
-    def __to_dict_coco_format(cls, df_json: pd.DataFrame) -> str:
+    def __to_str_coco_format(cls, df_json: pd.DataFrame) -> str:
         assert isinstance(df_json, pd.DataFrame)
         json_dict = {"info": coco_info()}
         for _name in ["images", "annotations", "licenses", "categories"]:
@@ -440,8 +447,8 @@ class CocoManager:
         strjson = json.dumps(json_dict)
         return strjson.replace('"%%null%%"', 'null')
 
-    def to_dict_coco_format(self) -> str:
-        return self.__to_dict_coco_format(self.df_json.copy())
+    def to_str_coco_format(self) -> str:
+        return self.__to_str_coco_format(self.df_json.copy())
 
     def save(self, filepath: str, save_images_path: str=None, exist_ok: bool=False, remake: bool=False):
         """
@@ -467,7 +474,7 @@ class CocoManager:
             self.df_json["images_coco_url"] = save_images_path + self.df_json["images_file_name"]
             self.re_index()
         with open(filepath, "w") as f:
-            f.write(self.to_dict_coco_format())
+            f.write(self.to_str_coco_format())
     
     def draw_annotations(
         self, src: Union[int, str], imgpath: str=None, is_draw_name: bool=False, is_show: bool=True,
@@ -634,7 +641,7 @@ class CocoManager:
         self.df_json = df.copy()
         self.re_index()
         with open(outdir + outfilename, "w") as f:
-            f.write(self.to_dict_coco_format())
+            f.write(self.to_str_coco_format())
         logger.info("END")
 
 
@@ -751,7 +758,7 @@ class CocoManager:
         self.re_index()
 
         with open(outdir + outfilename, "w") as f:
-            f.write(self.to_dict_coco_format())
+            f.write(self.to_str_coco_format())
         
         logger.info("END")
 
