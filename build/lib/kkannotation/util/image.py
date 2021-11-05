@@ -1,4 +1,4 @@
-from typing import Union, List
+from typing import List
 import numpy as np
 import cv2
 
@@ -7,18 +7,39 @@ from kkannotation.util.com import check_type_list
 
 
 __all__ = [
+    "COLORS",
     "draw_annotation",
 ]
 
+
+COLORS=[
+    (255,   0,   0),
+    (  0, 255,   0),
+    (  0,   0, 255),
+    (255, 255,   0),
+    (  0, 255, 255),
+    (255,   0, 255),
+    (128,   0,   0),
+    (  0, 128,   0),
+    (  0,   0, 128),
+    (128, 128,   0),
+    (  0, 128, 128),
+    (128,   0, 128),
+    (  0,   0,   0),
+    (128, 128, 128),
+    (192, 192, 192),
+    (255, 255, 255),
+]
 
 def draw_annotation(
     img: np.ndarray, bbox: [int, int, int, int], catecory_name: str=None,
     segmentations: List[List[int]]=None,
     keypoints: List[int]=None, keypoints_name: List[str]=None, 
     keypoints_skeleton: List[List[str]]=None,
+    color_id: int=None,
     color_bbox: (int, int, int)=(0,255,0),
     color_seg:  (int, int, int)=(255,0,0),
-    color_kpts: (int, int, int)=(0,0,255)
+    color_kpts: (int, int, int)=(0,0,255),
 ) -> np.ndarray:
     """
     Params::
@@ -46,6 +67,10 @@ def draw_annotation(
         assert keypoints_name is not None
         assert check_type_list(keypoints_skeleton, list, str)
         assert sum([len(x) == 2 for x in keypoints_skeleton]) == len(keypoints_skeleton)
+    if isinstance(color_id, int):
+        color_bbox = COLORS[ (color_id + 0) % len(COLORS) ]
+        color_seg  = COLORS[ (color_id + 1) % len(COLORS) ]
+        color_kpts = COLORS[ (color_id + 2) % len(COLORS) ]
     img = img.copy()
     # draw bbox
     x, y, w, h = bbox

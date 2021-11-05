@@ -11,6 +11,7 @@ logger = set_logger(__name__)
 
 __all__ = [
     "Streamer",
+    "Recorder",
 ]
 
 
@@ -124,3 +125,24 @@ class Streamer:
                 if max_images is not None and count > max_images:
                     logger.warning(f"number of saved images are reached max count: {max_images}")
                     break
+
+
+class Recorder:
+    def __init__(
+        self, out_filename: str, fps: float=None, width:int = None, height: int = None,
+        streamer: Streamer=None, fourcc: int = cv2.VideoWriter_fourcc(*'XVID')
+    ):
+        assert isinstance(out_filename, str)
+        logger.info(f"save output: {out_filename}", color=["BOLD", "GREEN"])
+        if streamer is not None:
+            # If streamer is defined, get it from there.
+            self.cap = cv2.VideoWriter(out_filename, fourcc, streamer.get_fps(), streamer.shape()[::-1])
+        else:
+            self.cap = cv2.VideoWriter(out_filename, fourcc, fps, (width, height))
+    def __del__(self):
+        self.cap.release()
+    def write(self, frame: np.ndarray):
+        self.cap.write(frame)
+    def close(self):
+        self.__del__()
+        logger.info(f"close {self}", color=["BOLD", "GREEN"])
