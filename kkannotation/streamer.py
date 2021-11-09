@@ -16,7 +16,7 @@ __all__ = [
 
 
 class Streamer:
-    def __init__(self, src: Union[str, int], reverse: bool=False, start_frame_id: int=0, max_frames: int=None):
+    def __init__(self, src: Union[str, int], reverse: bool=False, start_frame_id: int=0, max_frames: int=None, step: int=1):
         """
         Params::
             src:
@@ -34,12 +34,14 @@ class Streamer:
         """
         assert check_type(src, [str, int])
         assert isinstance(reverse, bool)
+        assert isinstance(step, int) and step > 0
         assert isinstance(start_frame_id, int)
         assert max_frames is None or isinstance(max_frames, int)
         logger.info(f"open src: {src}", color=["BOLD", "GREEN"])
         self.cap            = cv2.VideoCapture(src)
         self.src            = src
         self.reverse        = reverse
+        self.step           = step
         self.max_frames     = max_frames if max_frames is not None else int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self.start_frame_id = (len(self) - 1) if self.reverse and start_frame_id == 0 else start_frame_id
         self.__count        = 0
@@ -68,11 +70,14 @@ class Streamer:
         return self
 
     def __next__(self):
-        frame_id       = self.cap.get(cv2.CAP_PROP_POS_FRAMES)
-        is_next, frame = self.cap.read()
+        frame_id = self.cap.get(cv2.CAP_PROP_POS_FRAMES)
+        if self.__count > 0:
+            if self.reverse:
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id - (self.step - 1))
+            else:
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id + (self.step - 1))
+        is_next, frame = self.cap.read() # 1 step forward
         self.__count  += 1
-        if self.reverse:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id - 1)
         if self.__count > len(self): raise StopIteration()
         if is_next == False: raise StopIteration()
         return frame
@@ -93,6 +98,7 @@ class Streamer:
         return self.cap.get(cv2.CAP_PROP_FPS)
 
     def play(self):
+        logger.warning("stop playing video with ESQ key.")
         for frame in self:
             cv2.imshow('__window', frame)
             if cv2.waitKey(30) & 0xff == 27: # quit with ESQ key
@@ -108,8 +114,7 @@ class Streamer:
         frame = self[index]
         cv2.imwrite(filename, frame)
 
-    def save_images(self, outdir: str, step: int = 1, max_images: int=None, exist_ok: bool=False, remake: bool=False):
-        assert isinstance(step, int) and step > 0
+    def save_images(self, outdir: str, max_images: int=None, exist_ok: bool=False, remake: bool=False):
         if max_images is not None:
             assert isinstance(max_images, int) and max_images > 0
         outdir = correct_dirpath(outdir)
@@ -117,14 +122,14 @@ class Streamer:
         count  = 0
         maxlen = int(np.log10(len(self))) + 1
         makedirs(outdir, exist_ok=exist_ok, remake=remake)
-        for i, frame in enumerate(self):
-            if i % step == 0:
-                filename = f"{outdir}{bname}.{str(i).zfill(maxlen)}.png"
-                cv2.imwrite(filename, frame)
-                count += 1
-                if max_images is not None and count > max_images:
-                    logger.warning(f"number of saved images are reached max count: {max_images}")
-                    break
+        for frame in self:
+            frame_id = self.cap.get(cv2.CAP_PROP_POS_FRAMES) - 1
+            filename = f"{outdir}{bname}.{str(frame_id).zfill(maxlen)}.png"
+            cv2.imwrite(filename, frame)
+            count += 1
+            if max_images is not None and count > max_images:
+                logger.warning(f"number of saved images are reached max count: {max_images}")
+                break
 
 
 class Recorder:
