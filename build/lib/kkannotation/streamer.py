@@ -130,6 +130,10 @@ class Streamer:
             if max_images is not None and count > max_images:
                 logger.warning(f"number of saved images are reached max count: {max_images}")
                 break
+    
+    def to_list(self):
+        return [frame for frame in self]
+
 
 
 class Recorder:
