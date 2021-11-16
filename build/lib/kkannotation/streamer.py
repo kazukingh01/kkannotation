@@ -42,7 +42,8 @@ class Streamer:
         self.src            = src
         self.reverse        = reverse
         self.step           = step
-        self.max_frames     = max_frames if max_frames is not None else int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        len_stream          = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1) // self.step + 1
+        self.max_frames     = len_stream if max_frames is None else (max_frames if len_stream >= max_frames else len_stream)
         self.start_frame_id = (len(self) - 1) if self.reverse and start_frame_id == 0 else start_frame_id
         self.__count        = 0
 
@@ -52,10 +53,9 @@ class Streamer:
     def __len__(self):
         return self.max_frames
 
-    def __getitem__(self, index) -> np.ndarray:
-        if index >= len(self): raise IndexError
-        if self.reverse: index = self.start_frame_id - index
-        else:            index = self.start_frame_id + index
+    def __getitem__(self, index: int) -> np.ndarray:
+        if self.reverse: index = self.start_frame_id - (self.step * index)
+        else:            index = self.start_frame_id + (self.step * index)
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, index)
         is_next, frame = self.cap.read()
         if is_next == False: raise IndexError
@@ -66,20 +66,14 @@ class Streamer:
 
     def __iter__(self):
         self.__count = 0
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.start_frame_id)
         return self
 
     def __next__(self):
-        frame_id = self.cap.get(cv2.CAP_PROP_POS_FRAMES)
-        if self.__count > 0:
-            if self.reverse:
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id - (self.step - 1))
-            else:
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, frame_id + (self.step - 1))
-        is_next, frame = self.cap.read() # 1 step forward
-        self.__count  += 1
-        if self.__count > len(self): raise StopIteration()
-        if is_next == False: raise StopIteration()
+        try:
+            frame = self[self.__count]
+            self.__count += 1
+        except IndexError:
+            raise StopIteration()
         return frame
 
     def close(self):
@@ -97,12 +91,21 @@ class Streamer:
     def get_fps(self) -> float:
         return self.cap.get(cv2.CAP_PROP_FPS)
 
-    def play(self):
+    def play(self, is_org: bool=False):
         logger.warning("stop playing video with ESQ key.")
-        for frame in self:
-            cv2.imshow('__window', frame)
-            if cv2.waitKey(30) & 0xff == 27: # quit with ESQ key
-                break
+        if is_org:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            while True:
+                is_next, frame = self.cap.read()
+                if is_next == False: break
+                cv2.imshow('__window', frame)
+                if cv2.waitKey(30) & 0xff == 27: # quit with ESQ key
+                    break
+        else:
+            for frame in self:
+                cv2.imshow('__window', frame)
+                if cv2.waitKey(30) & 0xff == 27: # quit with ESQ key
+                    break
     
     def save_image(self, outdir: str, index: int, filename: str=None, exist_ok: bool=True):
         outdir = correct_dirpath(outdir)
