@@ -1,6 +1,7 @@
 from typing import List
 import numpy as np
 import cv2
+from PIL import Image
 
 # local package
 from kkannotation.util.com import check_type_list
@@ -9,6 +10,8 @@ from kkannotation.util.com import check_type_list
 __all__ = [
     "COLORS",
     "draw_annotation",
+    "pil2cv",
+    "cv2pil",
 ]
 
 
@@ -102,3 +105,24 @@ def draw_annotation(
                 index_p2 = np.where(keypoints_name == name_p2)[0][0]
                 img = cv2.line(img, tuple(keypoints[index_p1][:2]), tuple(keypoints[index_p2][:2]), color_kpts)
     return img
+
+def pil2cv(img: Image) -> np.ndarray:
+    new_image = np.array(img, dtype=np.uint8)
+    if new_image.ndim == 2:  # gray
+        pass
+    elif new_image.shape[2] == 3:  # RGB
+        new_image = cv2.cvtColor(new_image, cv2.COLOR_RGB2BGR)
+    elif new_image.shape[2] == 4:  # RGBA
+        new_image = cv2.cvtColor(new_image, cv2.COLOR_RGBA2BGRA)
+    return new_image
+
+def cv2pil(img: np.ndarray):
+    new_image = img.copy()
+    if new_image.ndim == 2:  # gray
+        pass
+    elif new_image.shape[2] == 3:  # RGB
+        new_image = cv2.cvtColor(new_image, cv2.COLOR_BGR2RGB)
+    elif new_image.shape[2] == 4:  # RGBA
+        new_image = cv2.cvtColor(new_image, cv2.COLOR_BGRA2RGBA)
+    new_image = Image.fromarray(new_image)
+    return new_image

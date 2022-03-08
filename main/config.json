@@ -1,0 +1,30 @@
+{
+    "height": 512,
+    "width": 512,
+    "canvas": {
+        "type": "noise",
+        "range_noise": [200, 255]
+    },
+    "procs": [
+        {
+            "type": "text",
+            "iters": 100,
+            "chars": "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!#$%&()-=^~|@`[{;+:*]},<.>/?_",
+            "range_scale": [0.4, 0.5],
+            "range_thickness": [1, 2],
+            "range_color": [0, 50],
+            "range_rotation": [0, 0],
+            "is_PIL": false
+        },
+        {
+            "type": "text",
+            "iters": 100,
+            "chars": "１２３４５６７８９０ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｈｙｚＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺあいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜｦﾝアイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン",
+            "range_scale": [20, 50],
+            "range_color": [0, 50],
+            "range_rotation": [-20, 20],
+            "is_PIL": true,
+            "font_pil": "./font/ipaexg.ttf"
+        }
+    ]
+}
