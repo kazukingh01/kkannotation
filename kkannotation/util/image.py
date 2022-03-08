@@ -32,14 +32,14 @@ COLORS=[
 ]
 
 def draw_annotation(
-    img: np.ndarray, bbox: [int, int, int, int], catecory_name: str=None,
+    img: np.ndarray, bbox, catecory_name: str=None,
     segmentations: List[List[int]]=None,
     keypoints: List[int]=None, keypoints_name: List[str]=None, 
     keypoints_skeleton: List[List[str]]=None,
     color_id: int=None,
-    color_bbox: (int, int, int)=(0,255,0),
-    color_seg:  (int, int, int)=(255,0,0),
-    color_kpts: (int, int, int)=(0,0,255),
+    color_bbox=(0,255,0),
+    color_seg =(255,0,0),
+    color_kpts=(0,0,255),
 ) -> np.ndarray:
     """
     Params::
@@ -98,7 +98,7 @@ def draw_annotation(
                     cv2.putText(img, keypoints_name[j], (int(x),int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, thickness=1)
         if keypoints_skeleton is not None:
             for name_p1, name_p2 in keypoints_skeleton:
-                index_p1 = np.where(ndf == name_p1)[0][0]
-                index_p2 = np.where(ndf == name_p2)[0][0]
+                index_p1 = np.where(keypoints_name == name_p1)[0][0]
+                index_p2 = np.where(keypoints_name == name_p2)[0][0]
                 img = cv2.line(img, tuple(keypoints[index_p1][:2]), tuple(keypoints[index_p2][:2]), color_kpts)
     return img
