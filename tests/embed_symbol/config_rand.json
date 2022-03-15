@@ -1,10 +1,18 @@
 {
-    "height": 512,
-    "width": 512,
+    "color_init": [255, 255, 255],
     "canvas": {
         "type": "noise",
+        "height": 512,
+        "width": 512,
         "range_noise": [200, 255]
     },
+    "labels": [
+        {
+            "name": "label0",
+            "path": "./symbol/sample1.png",
+            "thre": [[0, 200], [0, 200], [0, 200]]
+        }
+    ],
     "procs": [
         {
             "type": "text",
@@ -25,6 +33,43 @@
             "range_rotation": [-20, 20],
             "is_PIL": true,
             "font_pil": "./font/ipaexg.ttf"
+        },
+        {
+            "type": "line",
+            "iters": 20,
+            "range_thickness": [1, 2],
+            "range_color": [0, 50],
+            "n_lines": 1
+        },
+        {
+            "type": "circle",
+            "iters": 20,
+            "range_thickness": [1, 2],
+            "range_color": [0, 50],
+            "range_radius": [20, 50]
+        },
+        {
+            "type": "ellipse",
+            "iters": 20,
+            "range_thickness": [1, 2],
+            "range_color": [0, 50],
+            "range_rotation": [-20, 20],
+            "range_scale": [100, 200]
+        },
+        {
+            "type": "rectangle",
+            "iters": 20,
+            "range_thickness": [1, 2],
+            "range_color": [0, 50],
+            "range_rotation": [-20, 20],
+            "range_scale": [100, 200]
+        },
+        {
+            "type": "label",
+            "iters": 5,
+            "range_scale": [0.5, 2],
+            "range_rotation": [-20, 20],
+            "is_fix_scale_ratio": false
         }
     ]
 }
