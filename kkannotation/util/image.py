@@ -12,6 +12,7 @@ __all__ = [
     "draw_annotation",
     "pil2cv",
     "cv2pil",
+    "mask_from_bool_to_polygon",
 ]
 
 
@@ -126,3 +127,12 @@ def cv2pil(img: np.ndarray):
         new_image = cv2.cvtColor(new_image, cv2.COLOR_BGRA2RGBA)
     new_image = Image.fromarray(new_image)
     return new_image
+
+def mask_from_bool_to_polygon(img: np.ndarray, ignore_n_point: int=6):
+    list_polygons = []
+    contours, _   = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    for ndfwk in contours:
+        listwk = ndfwk.reshape(-1).tolist()
+        if len(listwk) < 2 * ignore_n_point: continue
+        list_polygons.append(listwk)
+    return list_polygons

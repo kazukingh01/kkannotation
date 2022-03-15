@@ -28,6 +28,7 @@ setup(
         'numpy>=1.20.3',
         'opencv-python>=4.5.3.56',
         'pandas>=1.2.4',
+        'Pillow>=9.0.1',
         'python-dateutil>=2.8.1',
         'pytz>=2021.1',
         'six>=1.16.0',

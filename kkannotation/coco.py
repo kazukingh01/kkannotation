@@ -326,7 +326,7 @@ class CocoManager:
                 re_seg.append(contours[0].reshape(-1).astype(int).tolist())
             ndf_json[i, index_seg] = re_seg
 
-    def add_json(self, src: Union[str, dict], root_dir: str=None):
+    def add_json(self, src: Union[str, dict], root_dir: str=None, is_add_df: bool=True):
         """
         add coco file.
         Params::
@@ -351,7 +351,17 @@ class CocoManager:
         df = self.coco_json_to_df(json_coco)
         if root_dir is not None:
             df["images_coco_url"] = correct_dirpath(root_dir) + df["images_file_name"]
-        self.df_json = pd.concat([self.df_json, df], axis=0, ignore_index=True, sort=False)
+        if is_add_df:
+            self.df_json = pd.concat([self.df_json, df], axis=0, ignore_index=True, sort=False)
+            self.check_index()
+            self.re_index()
+        return df
+    
+    def add_jsons(self, paths: List[str], root_dir: str=None):
+        assert check_type_list(paths, str)
+        assert root_dir is None or isinstance(root_dir, str)
+        list_df = [self.add_json(x, root_dir=root_dir, is_add_df=False) for x in paths]
+        self.df_json = pd.concat(list_df, axis=0, ignore_index=True, sort=False)
         self.check_index()
         self.re_index()
     
