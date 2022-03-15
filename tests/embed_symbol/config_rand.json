@@ -8,8 +8,8 @@
     },
     "labels": [
         {
-            "name": "label0",
-            "path": "./symbol/sample1.png",
+            "name": "bicycle",
+            "path": "./bicycle.png",
             "thre": [[0, 200], [0, 200], [0, 200]]
         }
     ],
@@ -31,8 +31,7 @@
             "range_scale": [20, 50],
             "range_color": [0, 50],
             "range_rotation": [-20, 20],
-            "is_PIL": true,
-            "font_pil": "./font/ipaexg.ttf"
+            "is_PIL": true
         },
         {
             "type": "line",
@@ -67,7 +66,7 @@
         {
             "type": "label",
             "iters": 5,
-            "range_scale": [0.5, 2],
+            "range_scale": [0.1, 0.2],
             "range_rotation": [-20, 20],
             "is_fix_scale_ratio": false
         }

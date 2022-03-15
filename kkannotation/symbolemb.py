@@ -43,9 +43,13 @@ class SymbolEmbedding:
             self.canvas      = lambda: cv2.imread(self.backgrounds[np.random.randint(0, len(self.backgrounds))])
         self.labels = copy.deepcopy(labels)
         for dictwk in self.labels:
-            dictwk["img"]  = cv2.imread(dictwk["path"])
-            if "mask" in dictwk: dictwk["mask"] = cv2.imread(dictwk["mask"])
-            else:                dictwk["mask"] = __class__.get_mask(dictwk["img"], thre=dictwk.get("thre"))
+            dictwk["img"] = cv2.imread(dictwk["path"], cv2.IMREAD_UNCHANGED)
+            if "mask" in dictwk:
+                dictwk["mask"] = cv2.imread(dictwk["mask"])
+            else:
+                dictwk["mask"] = __class__.get_mask(dictwk["img"], thre=dictwk.get("thre"))
+            if dictwk["img"].shape[-1] == 4:
+                dictwk["img"] = dictwk["img"][:, :, :3]
     
     def set_process(self, height, width):
         _procs, _procs_label = [], []
@@ -167,18 +171,23 @@ class SymbolEmbedding:
    
     @classmethod
     def get_mask(cls, img: np.ndarray, thre: List[int]=None):
-        assert isinstance(img,  np.ndarray) and len(img.shape) == 3 and img.shape[-1] == 3
-        if thre is not None:
-            __class__.check_color_range(thre)
-            mask = []
-            if len(thre) == 2:
-                thre = [thre, thre, thre]
-            for i, (x, y) in enumerate(thre):
-                mask.append(((img[:, :, i] >= x) & (img[:, :, i] <= y)).astype(int))
-            mask = np.stack(mask)
-            mask = (mask.sum(axis=0) == 3).astype(np.uint8) * 255
+        assert isinstance(img,  np.ndarray) and len(img.shape) == 3 and img.shape[-1] in [3, 4]
+        if img.shape[-1] == 4:
+            # if image has RGBA ch,     "cv2.imread(x, cv2.IMREAD_UNCHANGED)" function read image with (height, width, BGRA).
+            # if image has only RGB ch, "cv2.imread(x, cv2.IMREAD_UNCHANGED)" function read image with (height, width, BGR).
+            mask = ((img[:, :, -1] > 0) * 255).astype(np.uint8)
         else:
-            mask = (np.ones(img.shape[:2]) * 255).astype(np.uint8)
+            if thre is not None:
+                __class__.check_color_range(thre)
+                mask = []
+                if len(thre) == 2:
+                    thre = [thre, thre, thre]
+                for i, (x, y) in enumerate(thre):
+                    mask.append(((img[:, :, i] >= x) & (img[:, :, i] <= y)).astype(int))
+                mask = np.stack(mask)
+                mask = (mask.sum(axis=0) == 3).astype(np.uint8) * 255
+            else:
+                mask = (np.ones(img.shape[:2]) * 255).astype(np.uint8)
         return mask
     
     @classmethod
