@@ -10,7 +10,7 @@ Usage labelme::
 
 if __name__ == "__main__":
     labelme2coco = Labelme2Coco(
-        dirpath_json="./json", dirpath_img="./img",
+        dirpath_json="./json", dirpath_img="../img",
         categories_name=["dog", "cat"],
         keypoints=["eye_left", "eye_right", "nose", "mouth"],
         keypoints_belong={

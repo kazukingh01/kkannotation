@@ -3,7 +3,7 @@ from kkannotation.coco import CocoManager
 
 if __name__ == "__main__":
     coco = CocoManager()
-    coco.add_json("./coco.json", root_dir="./img/")
+    coco.add_json("./coco.json", root_dir="../img/")
     coco.draw_annotations(0, is_draw_name=True, is_show=True)
     """
     >>> coco[0]
