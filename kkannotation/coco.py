@@ -487,9 +487,10 @@ class CocoManager:
             f.write(self.to_str_coco_format())
     
     def draw_annotations(
-        self, src: Union[int, str], imgpath: str=None, is_draw_name: bool=False, is_show: bool=True,
+        self, src: Union[int, str], imgpath: str=None, is_draw_name: bool=False, is_show: bool=True, save_path: str=None
     ) -> np.ndarray:
         assert check_type(src, [int, str])
+        assert save_path is None or isinstance(save_path, str)
         df = None
         if   isinstance(src, int): df = self[src]
         elif isinstance(src, str): df = self.df_json[self.df_json["images_file_name"] == src].copy()
@@ -510,6 +511,8 @@ class CocoManager:
         if is_show:
             cv2.imshow("sample", img)
             cv2.waitKey(0)
+        if save_path is not None:
+            cv2.imwrite(save_path, img)
         return img
     
     def output_labelme_files(self, outdir: str, root_dir: str=None, exist_ok: bool=False, remake: bool=False):
@@ -558,6 +561,28 @@ class CocoManager:
             img   = self.draw_annotations(i, imgpath=imgpath, is_draw_name=is_draw_name, is_show=False)
             fname = self[i]["images_file_name"].iloc[0]
             cv2.imwrite(outdir + fname, img)
+    
+    def crop_bbox(self, outdir: str, padding: Union[int, List[int]]=None, exist_ok: bool=False, remake: bool=False):
+        if padding is None: padding = 0
+        if isinstance(padding, int): padding = [-padding, -padding, padding, padding]
+        assert check_type_list(padding, int) and len(padding) == 4
+        df  = self.df_json.copy()
+        df["__count"] = 1
+        df["__count"] = df.groupby("images_coco_url")["__count"].cumsum()
+        ndf       = np.concatenate(df["annotations_bbox"].values).reshape(-1, 4)
+        ndf[:, 2] = ndf[:, 0] + ndf[:, 2] + 1
+        ndf[:, 3] = ndf[:, 1] + ndf[:, 3] + 1
+        ndf       = ndf.astype(int) + np.array(padding)
+        ndf[:, 0][ndf[:, 0] < 0] = 0
+        ndf[:, 1][ndf[:, 1] < 0] = 0
+        outdir    = correct_dirpath(outdir)
+        makedirs(outdir, exist_ok=exist_ok, remake=remake)
+        for path, i_crop, (x1, y1, x2, y2) in zip(df["images_coco_url"].values, df["__count"].values, ndf):
+            img = cv2.imread(path)
+            h, w, _ = img.shape
+            if x2 > w: x2 = w
+            if y2 > h: y2 = h
+            cv2.imwrite(f"{outdir}{os.path.basename(path)}.{i_crop}.png", img[y1:y2, x1:x2, :])
 
     def scale_bbox(self, target: dict = {}, padding_all: int=None):
         """

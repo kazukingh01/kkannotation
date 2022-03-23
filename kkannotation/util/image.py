@@ -13,6 +13,7 @@ __all__ = [
     "pil2cv",
     "cv2pil",
     "mask_from_bool_to_polygon",
+    "fit_resize",
 ]
 
 
@@ -136,3 +137,26 @@ def mask_from_bool_to_polygon(img: np.ndarray, ignore_n_point: int=6):
         if len(listwk) < 2 * ignore_n_point: continue
         list_polygons.append(listwk)
     return list_polygons
+
+def fit_resize(img: np.ndarray, dim: str, scale: int):
+    """
+    Params::
+        img: image
+        dim: x or y
+        scale: width or height
+    """
+    if dim not in ["x","y"]: raise Exception(f"dim: {dim} is 'x' or 'y'.")
+    height = img.shape[0]
+    width  = img.shape[1]
+    height_after, width_after = None, None
+    if   type(scale) == int and scale > 10:
+        if   dim == "x":
+            width_after  = int(scale)
+            height_after = int(height * (scale / width))
+        elif dim == "y":
+            height_after = int(scale)
+            width_after  = int(width * (scale / height))
+    else:
+        raise Exception(f"scale > 10.")
+    img = cv2.resize(img , (width_after, height_after)) # w, h
+    return img
