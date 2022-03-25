@@ -1,6 +1,7 @@
 from typing import List
 import numpy as np
 import cv2
+from PIL import Image
 
 # local package
 from kkannotation.util.com import check_type_list
@@ -9,6 +10,10 @@ from kkannotation.util.com import check_type_list
 __all__ = [
     "COLORS",
     "draw_annotation",
+    "pil2cv",
+    "cv2pil",
+    "mask_from_bool_to_polygon",
+    "fit_resize",
 ]
 
 
@@ -32,14 +37,14 @@ COLORS=[
 ]
 
 def draw_annotation(
-    img: np.ndarray, bbox: [int, int, int, int], catecory_name: str=None,
+    img: np.ndarray, bbox, catecory_name: str=None,
     segmentations: List[List[int]]=None,
     keypoints: List[int]=None, keypoints_name: List[str]=None, 
     keypoints_skeleton: List[List[str]]=None,
     color_id: int=None,
-    color_bbox: (int, int, int)=(0,255,0),
-    color_seg:  (int, int, int)=(255,0,0),
-    color_kpts: (int, int, int)=(0,0,255),
+    color_bbox=(0,255,0),
+    color_seg =(255,0,0),
+    color_kpts=(0,0,255),
 ) -> np.ndarray:
     """
     Params::
@@ -98,7 +103,60 @@ def draw_annotation(
                     cv2.putText(img, keypoints_name[j], (int(x),int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, thickness=1)
         if keypoints_skeleton is not None:
             for name_p1, name_p2 in keypoints_skeleton:
-                index_p1 = np.where(ndf == name_p1)[0][0]
-                index_p2 = np.where(ndf == name_p2)[0][0]
+                index_p1 = np.where(keypoints_name == name_p1)[0][0]
+                index_p2 = np.where(keypoints_name == name_p2)[0][0]
                 img = cv2.line(img, tuple(keypoints[index_p1][:2]), tuple(keypoints[index_p2][:2]), color_kpts)
+    return img
+
+def pil2cv(img: Image) -> np.ndarray:
+    new_image = np.array(img, dtype=np.uint8)
+    if new_image.ndim == 2:  # gray
+        pass
+    elif new_image.shape[2] == 3:  # RGB
+        new_image = cv2.cvtColor(new_image, cv2.COLOR_RGB2BGR)
+    elif new_image.shape[2] == 4:  # RGBA
+        new_image = cv2.cvtColor(new_image, cv2.COLOR_RGBA2BGRA)
+    return new_image
+
+def cv2pil(img: np.ndarray):
+    new_image = img.copy()
+    if new_image.ndim == 2:  # gray
+        pass
+    elif new_image.shape[2] == 3:  # RGB
+        new_image = cv2.cvtColor(new_image, cv2.COLOR_BGR2RGB)
+    elif new_image.shape[2] == 4:  # RGBA
+        new_image = cv2.cvtColor(new_image, cv2.COLOR_BGRA2RGBA)
+    new_image = Image.fromarray(new_image)
+    return new_image
+
+def mask_from_bool_to_polygon(img: np.ndarray, ignore_n_point: int=6):
+    list_polygons = []
+    contours, _   = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    for ndfwk in contours:
+        listwk = ndfwk.reshape(-1).tolist()
+        if len(listwk) < 2 * ignore_n_point: continue
+        list_polygons.append(listwk)
+    return list_polygons
+
+def fit_resize(img: np.ndarray, dim: str, scale: int):
+    """
+    Params::
+        img: image
+        dim: x or y
+        scale: width or height
+    """
+    if dim not in ["x","y"]: raise Exception(f"dim: {dim} is 'x' or 'y'.")
+    height = img.shape[0]
+    width  = img.shape[1]
+    height_after, width_after = None, None
+    if   type(scale) == int and scale > 10:
+        if   dim == "x":
+            width_after  = int(scale)
+            height_after = int(height * (scale / width))
+        elif dim == "y":
+            height_after = int(scale)
+            width_after  = int(width * (scale / height))
+    else:
+        raise Exception(f"scale > 10.")
+    img = cv2.resize(img , (width_after, height_after)) # w, h
     return img
