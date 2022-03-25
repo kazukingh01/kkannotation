@@ -86,12 +86,18 @@ class SymbolEmbedding:
                 if _type == "label":
                     _procs_label.append(partial(
                         self.draw_label, height=height, width=width, color_init=self.color_init, n_merge=None,
-                        imgs_label=[x["img"] for x in self.labels[ndf_bool]], imgs_mask=[x["mask"] for x in self.labels[ndf_bool]], **x
+                        imgs_label=[x["img"] for x in self.labels[ndf_bool]], 
+                        imgs_mask=[x["mask"] for x in self.labels[ndf_bool]],
+                        imgs_name=self.labels_name[ndf_bool],
+                        **x
                     ))
                 elif _type == "dest":
                     _procs_dest.append(partial(
                         self.draw_label, height=height, width=width, color_init=self.color_init, 
-                        imgs_label=[x["img"] for x in self.labels[ndf_bool]], imgs_mask=[x["mask"] for x in self.labels[ndf_bool]], **x
+                        imgs_label=[x["img"] for x in self.labels[ndf_bool]],
+                        imgs_mask=[x["mask"] for x in self.labels[ndf_bool]],
+                        imgs_name=self.labels_name[ndf_bool],
+                        **x
                     ))
         self.procs_draw  = _procs
         self.procs_label = _procs_label
@@ -112,18 +118,18 @@ class SymbolEmbedding:
             mask = np.concatenate([mask, dest_mask], axis=0).astype(bool)
         mask_duplication = np.zeros((img.shape[0], img.shape[1])).astype(bool)
         for proc in self.procs_label:
-            label, label_mask, indexes = proc()
-            for a, b, c in zip(label, label_mask, indexes):
-                if mask_duplication[b].sum() > 0: continue
-                mask_duplication[b] = True
-                ndf_y, ndf_x = np.where(b)
+            labels_img, labels_mask, labels_name = proc()
+            for label_img, label_mask, label_name in zip(labels_img, labels_mask, labels_name):
+                if mask_duplication[label_mask].sum() > 0: continue
+                mask_duplication[label_mask] = True
+                ndf_y, ndf_x = np.where(label_mask)
                 coco.add(
                     filepath, img.shape[0], img.shape[1], 
                     [int(ndf_x.min()), int(ndf_y.min()), int(ndf_x.max()-ndf_x.min()), int(ndf_y.max()-ndf_y.min())],
-                    self.labels[c]["name"], segmentations=mask_from_bool_to_polygon(b.astype(np.uint8))
+                    label_name, segmentations=mask_from_bool_to_polygon(label_mask.astype(np.uint8))
                 )
-                adds = np.concatenate([adds, a.reshape(1, *a.shape)], axis=0)
-                mask = np.concatenate([mask, b.reshape(1, *b.shape)], axis=0)
+                adds = np.concatenate([adds, label_img. reshape(1, *label_img. shape)], axis=0)
+                mask = np.concatenate([mask, label_mask.reshape(1, *label_mask.shape)], axis=0)
         indexes = np.random.permutation(np.arange(adds.shape[0]))
         adds    = adds[indexes]
         mask    = mask[indexes]
@@ -461,13 +467,16 @@ class SymbolEmbedding:
     @classmethod
     def draw_label(
         cls, height: int=None, width: int=None, iters: int=None, color_init=None, 
-        imgs_label: List[np.ndarray]=None, imgs_mask: List[np.ndarray]=None, range_noise: Union[List[int], List[List[int]]]=None,
-        range_scale: List[float]=[0.5, 2], range_rotation: List[int]=[-20, 20], is_fix_scale_ratio: bool=True, n_merge: int=1
+        imgs_label: List[np.ndarray]=None, imgs_mask: List[np.ndarray]=None, imgs_name: np.ndarray=None,
+        range_noise: Union[List[int], List[List[int]]]=None, range_scale: List[float]=[0.5, 2], 
+        range_rotation: List[int]=[-20, 20], is_fix_scale_ratio: bool=True, n_merge: int=1
     ):
         assert isinstance(iters, int) and iters > 0
         assert isinstance(height, int)
         assert isinstance(width,  int)
         assert check_type_list(imgs_label, np.ndarray)
+        assert check_type_list(imgs_mask,  np.ndarray)
+        assert isinstance(imgs_name, np.ndarray)
         assert check_type_list(range_scale, [int, float]) and len(range_scale) == 2 and range_scale[0] <= range_scale[1]
         if n_merge is None: n_merge = 1
         assert isinstance(n_merge, int) and n_merge >= 1 and (iters % n_merge == 0)
@@ -529,4 +538,4 @@ class SymbolEmbedding:
                     tmp, tmp_m = None, None
             img  = np.stack(list_img).astype(np.uint8)
             mask = np.stack(list_mask).astype(bool)
-        return img, mask, indexes
+        return img, mask, imgs_name[indexes]
