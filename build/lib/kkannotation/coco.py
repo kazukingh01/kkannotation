@@ -515,7 +515,7 @@ class CocoManager:
             cv2.imwrite(save_path, img)
         return img
     
-    def output_labelme_files(self, outdir: str, root_dir: str=None, exist_ok: bool=False, remake: bool=False):
+    def output_labelme_files(self, outdir: str, root_dir: str=None, exist_ok: bool=False, remake: bool=False, version: str="4.5.10"):
         outdir = correct_dirpath(outdir)
         if root_dir is not None: root_dir = correct_dirpath(root_dir)
         makedirs(outdir, exist_ok=exist_ok, remake=remake)
@@ -524,7 +524,7 @@ class CocoManager:
             out_filename = ".".join(df["images_file_name"].iloc[0].split(".")[:-1]) + ".json"
             path_image   = df["images_coco_url"].iloc[0] if root_dir is None else root_dir + df["images_file_name"].iloc[0]
             dict_labelme = {
-                "version": "1.0.0", "flags": {}, "shapes": [],
+                "version": version, "flags": {}, "shapes": [],
                 "imagePath": path_image, "imageData": None,
                 "imageHeight": int(df["images_height"].iloc[0]),
                 "imageWidth" : int(df["images_width"].iloc[0]),
@@ -552,7 +552,7 @@ class CocoManager:
                             dictwk["points"] = [x, y]
                             dict_labelme["shapes"].append(dictwk)
             with open(outdir + out_filename, 'w') as f:
-                json.dump(dict_labelme, f)
+                json.dump(dict_labelme, f, indent=4)
 
     def save_draw_annotations(self, outdir: str, imgpath: str=None, is_draw_name: bool=False, exist_ok: bool=False, remake: bool=False):
         outdir = correct_dirpath(outdir)

@@ -62,7 +62,9 @@ class Labelme2Coco:
         """
         logger.info(f"read json file: {json_path}")
         fjson = json.load(open(json_path))
-        if fjson.get("imagePath") is None: return pd.DataFrame()
+        if fjson.get("imagePath") is None:
+            logger.warning(f"file: {json_path} is not labelme format.")
+            return pd.DataFrame()
         fname = self.dirpath_img + os.path.basename(fjson["imagePath"])
         img   = cv2.imread(fname)
         # labelme json to dataframe

@@ -35,7 +35,7 @@ class Streamer:
         assert check_type(src, [str, int])
         assert isinstance(reverse, bool)
         assert isinstance(step, int) and step > 0
-        assert isinstance(start_frame_id, int)
+        assert isinstance(start_frame_id, int) and start_frame_id >= 0
         assert max_frames is None or isinstance(max_frames, int)
         logger.info(f"open src: {src}", color=["BOLD", "GREEN"])
         self.cap            = cv2.VideoCapture(src)
@@ -44,6 +44,7 @@ class Streamer:
         self.step           = step
         len_stream          = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1) // self.step + 1
         self.max_frames     = len_stream if max_frames is None else (max_frames if len_stream >= max_frames else len_stream)
+        assert start_frame_id < int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1)
         self.start_frame_id = (len(self) - 1) if self.reverse and start_frame_id == 0 else start_frame_id
         self.__count        = 0
 
@@ -54,6 +55,7 @@ class Streamer:
         return self.max_frames
 
     def __getitem__(self, index: int) -> np.ndarray:
+        if index >= self.max_frames: raise IndexError
         if self.reverse: index = self.start_frame_id - (self.step * index)
         else:            index = self.start_frame_id + (self.step * index)
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, index)
