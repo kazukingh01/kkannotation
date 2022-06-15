@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 import numpy as np
 import cv2
 from PIL import Image
@@ -37,9 +37,9 @@ COLORS=[
 ]
 
 def draw_annotation(
-    img: np.ndarray, bbox, catecory_name: str=None,
+    img: np.ndarray, bbox: List[Union[int, float]]=None, catecory_name: str=None,
     segmentations: List[List[int]]=None,
-    keypoints: List[int]=None, keypoints_name: List[str]=None, 
+    keypoints: List[Union[int, float]]=None, keypoints_name: List[str]=None, 
     keypoints_skeleton: List[List[str]]=None,
     color_id: int=None,
     color_bbox=(0,255,0),
@@ -56,7 +56,7 @@ def draw_annotation(
             [x1, y1, v1, x2, y2, v2, ...]
     """
     assert isinstance(img, np.ndarray)
-    assert check_type_list(bbox, [int, float]) and sum([(x >= 0) for x in bbox]) == 4
+    assert bbox is None or (check_type_list(bbox, [int, float]) and sum([(x >= 0) for x in bbox]) == 4)
     assert catecory_name is None or isinstance(catecory_name, str)
     if segmentations is not None:
         assert check_type_list(segmentations, list, [int, float])
@@ -78,9 +78,10 @@ def draw_annotation(
         color_kpts = COLORS[ (color_id + 2) % len(COLORS) ]
     img = img.copy()
     # draw bbox
-    x, y, w, h = bbox
-    img = cv2.rectangle(img, (int(x), int(y)), (int(x+w), int(y+h)), color_bbox, 2)
-    if catecory_name is not None: cv2.putText(img, catecory_name, (int(x),int(y)), cv2.FONT_HERSHEY_SIMPLEX, 2.0, color_bbox, thickness=2)
+    if bbox is not None:
+        x, y, w, h = bbox
+        img = cv2.rectangle(img, (int(x), int(y)), (int(x+w), int(y+h)), color_bbox, 2)
+        if catecory_name is not None: cv2.putText(img, catecory_name, (int(x),int(y)), cv2.FONT_HERSHEY_SIMPLEX, 2.0, color_bbox, thickness=2)
     # draw segmentation
     imgwk = np.zeros_like(img)
     for seg in segmentations:

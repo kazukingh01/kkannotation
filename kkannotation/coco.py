@@ -562,28 +562,84 @@ class CocoManager:
             fname = self[i]["images_file_name"].iloc[0]
             cv2.imwrite(outdir + fname, img)
     
-    def crop_bbox(self, outdir: str, padding: Union[int, List[int]]=None, exist_ok: bool=False, remake: bool=False):
-        if padding is None: padding = 0
-        if isinstance(padding, int): padding = [-padding, -padding, padding, padding]
-        assert check_type_list(padding, int) and len(padding) == 4
-        df  = self.df_json.copy()
-        df["__count"] = 1
-        df["__count"] = df.groupby("images_coco_url")["__count"].cumsum()
-        ndf       = np.concatenate(df["annotations_bbox"].values).reshape(-1, 4)
-        ndf[:, 2] = ndf[:, 0] + ndf[:, 2] + 1
-        ndf[:, 3] = ndf[:, 1] + ndf[:, 3] + 1
-        ndf       = ndf.astype(int) + np.array(padding)
-        ndf[:, 0][ndf[:, 0] < 0] = 0
-        ndf[:, 1][ndf[:, 1] < 0] = 0
-        outdir    = correct_dirpath(outdir)
+    def crop_bbox(self, crop_by_name: str, outdir: str, exist_ok: bool=False, remake: bool=False, remove_size: int=None):
+        assert isinstance(crop_by_name, str)
+        assert isinstance(outdir, str)
+        assert remove_size is None or (isinstance(remove_size, int) and remove_size > 0)
+        df      = self.df_json.copy()
+        df_crop = df.loc[(df["categories_name"] == crop_by_name)].copy()
+        outdir  = correct_dirpath(outdir)
         makedirs(outdir, exist_ok=exist_ok, remake=remake)
-        for path, i_crop, (x1, y1, x2, y2) in zip(df["images_coco_url"].values, df["__count"].values, ndf):
-            img = cv2.imread(path)
-            h, w, _ = img.shape
-            if x2 > w: x2 = w
-            if y2 > h: y2 = h
-            cv2.imwrite(f"{outdir}{os.path.basename(path)}.{i_crop}.png", img[y1:y2, x1:x2, :])
-
+        df_json = []
+        for image_path, (crop_x, crop_y, crop_w, crop_h) in df_crop[["images_coco_url", "annotations_bbox"]].values:
+            crop_x, crop_y, crop_w, crop_h = int(crop_x), int(crop_y), int(crop_w), int(crop_h)
+            images_file_name = f"{os.path.basename(image_path)}.{crop_x}_{crop_y}_{crop_w}_{crop_h}.png"
+            images_coco_url  = outdir + images_file_name
+            df_ann = df.loc[(df["images_coco_url"] == image_path)].copy()
+            # image
+            img = cv2.imread(image_path)
+            img = img[crop_y:crop_y+crop_h, crop_x:crop_x+crop_w, :]
+            cv2.imwrite(images_coco_url, img)
+            for i_ann in range(df_ann.shape[0]):
+                # annotations
+                se = df_ann.iloc[i_ann].copy()
+                se["images_coco_url"]  = images_coco_url
+                se["images_file_name"] = images_file_name
+                se["images_height"]    = crop_h
+                se["images_width"]     = crop_w
+                # bbox
+                x1, y1,  w,  h = se["annotations_bbox"]
+                x1, y1, x2, y2 = x1, y1, x1 + w, y1 + h
+                x1, y1, x2, y2 = x1 - crop_x, y1 - crop_y, x2 - crop_x, y2 - crop_y
+                if x1 < 0:      x1 = 0
+                if x1 > crop_w: x1 = crop_w
+                if x2 < 0:      x2 = 0
+                if x2 > crop_w: x2 = crop_w
+                if y1 < 0:      y1 = 0
+                if y1 > crop_h: y1 = crop_h
+                if y2 < 0:      y2 = 0
+                if y2 > crop_h: y2 = crop_h
+                se["annotations_bbox"] = [x1, y1, x2 - x1, y2 - y1]
+                if len(se["annotations_keypoints"]) > 0:
+                    # keypoint
+                    ndf_kpt = np.array(se["annotations_keypoints"])
+                    ndf_kpt = ndf_kpt.reshape(-1, 3)
+                    ndf_kpt[:, 0] -= crop_x
+                    ndf_kpt[:, 1] -= crop_y
+                    ndf_kpt[(ndf_kpt[:, 0] < 0     ), 2] = 0 # point with out of window, vis to 0
+                    ndf_kpt[(ndf_kpt[:, 0] > crop_w), 2] = 0 # point with out of window, vis to 0
+                    ndf_kpt[(ndf_kpt[:, 1] < 0     ), 2] = 0 # point with out of window, vis to 0
+                    ndf_kpt[(ndf_kpt[:, 1] > crop_h), 2] = 0 # point with out of window, vis to 0
+                    ndf_kpt[(ndf_kpt[:, 2] == 0), 0]     = 0 # vis == 0, point to 0
+                    ndf_kpt[(ndf_kpt[:, 2] == 0), 1]     = 0 # vis == 0, point to 0
+                    se["annotations_keypoints"] = [float(x) for x in ndf_kpt.reshape(-1)]
+                if len(se["annotations_segmentation"]) > 0:
+                    # segmentation
+                    segs = []
+                    for seg in se["annotations_segmentation"]:
+                        assert len(seg) > 0
+                        ndf_seg = np.array(seg).reshape(-1, 2)
+                        ndf_seg[:, 0] -= crop_x
+                        ndf_seg[:, 1] -= crop_y
+                        ndf_seg[(ndf_seg[:, 0] < 0     ), 0] = 0
+                        ndf_seg[(ndf_seg[:, 0] > crop_w), 0] = crop_w
+                        ndf_seg[(ndf_seg[:, 1] < 0     ), 1] = 0
+                        ndf_seg[(ndf_seg[:, 1] > crop_h), 1] = crop_h
+                        segs.append([int(x) for x in ndf_seg.reshape(-1)])
+                    se["annotations_segmentation"] = segs
+                df_json.append(se)
+        df_json = pd.concat(df_json, axis=1).T
+        if remove_size is not None:
+            # remove small bbox
+            ndf     = np.stack(df_json["annotations_bbox"].values)
+            boolwk  = ((ndf[:, 2] <= remove_size) | (ndf[:, 3] <= remove_size))
+            df_json = df_json.loc[~boolwk]
+        coco    = __class__()
+        coco.df_json = df_json
+        coco.re_index()
+        coco.save(outdir + "/coco.json")
+        return coco
+    
     def scale_bbox(self, target: dict = {}, padding_all: int=None):
         """
         bbox を広げたり縮めたりする
