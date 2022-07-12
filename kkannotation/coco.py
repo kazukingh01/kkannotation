@@ -562,12 +562,54 @@ class CocoManager:
             fname = self[i]["images_file_name"].iloc[0]
             cv2.imwrite(outdir + fname, img)
     
-    def crop_bbox(self, crop_by_name: str, outdir: str, exist_ok: bool=False, remake: bool=False, remove_size: int=None):
-        assert isinstance(crop_by_name, str)
+    def scale_bbox(self, padding: Union[int, float, List[int], List[float]], scale_by_name: Union[str, List[str]]=None):
+        if isinstance(padding, int):   padding = [padding, ] * 4
+        if isinstance(padding, float): padding = [padding, ] * 4
+        if isinstance(scale_by_name, str): scale_by_name = [scale_by_name, ]
+        assert scale_by_name is None or check_type_list(scale_by_name, str)
+        assert check_type_list(padding, int) or check_type_list(padding, float)
+        assert len(padding) == 4
+        df_json = []
+        for i in range(self.df_json.shape[0]):
+            se = self.df_json.iloc[i].copy()
+            if scale_by_name is not None and se["categories_name"] in scale_by_name:
+                df_json.append(se)
+                continue
+            # bbox
+            img_h,  img_w  = se["images_height"], se["images_width"]
+            x1, y1,  w,  h = se["annotations_bbox"]
+            x1, y1, x2, y2 = x1, y1, x1 + w, y1 + h
+            diff_x1, diff_y1, diff_x2, diff_y2 = padding
+            if isinstance(diff_x1, float):
+                diff_x1 = w * (diff_x1 - 1.0)
+                diff_y1 = h * (diff_y1 - 1.0)
+                diff_x2 = w * (diff_x2 - 1.0)
+                diff_y2 = h * (diff_y2 - 1.0)
+            x1, y1, x2, y2 = x1 - diff_x1, y1 - diff_y1, x2 + diff_x2, y2 + diff_y2
+            if x1 < 0:     x1 = 0
+            if x1 > img_w: x1 = img_w
+            if x2 < 0:     x2 = 0
+            if x2 > img_w: x2 = img_w
+            if y1 < 0:     y1 = 0
+            if y1 > img_h: y1 = img_h
+            if y2 < 0:     y2 = 0
+            if y2 > img_h: y2 = img_h
+            se["annotations_bbox"] = [x1, y1, x2 - x1, y2 - y1]
+            df_json.append(se)
+        df_json = pd.concat(df_json, axis=1).T
+        self.df_json = df_json
+        self.re_index()
+
+    def crop_bbox(self, outdir: str, crop_by_name: Union[str, List[str]]=None, exist_ok: bool=False, remake: bool=False, remove_size: int=None):
         assert isinstance(outdir, str)
+        if isinstance(crop_by_name, str): crop_by_name = [crop_by_name, ]
+        assert crop_by_name is None or check_type_list(crop_by_name, str)
         assert remove_size is None or (isinstance(remove_size, int) and remove_size > 0)
         df      = self.df_json.copy()
-        df_crop = df.loc[(df["categories_name"] == crop_by_name)].copy()
+        if crop_by_name is not None:
+            df_crop = df.loc[(df["categories_name"].isin(crop_by_name))].copy()
+        else:
+            df_crop = df.copy()
         outdir  = correct_dirpath(outdir)
         makedirs(outdir, exist_ok=exist_ok, remake=remake)
         df_json = []
@@ -639,220 +681,6 @@ class CocoManager:
         coco.re_index()
         coco.save(outdir + "/coco.json")
         return coco
-    
-    def scale_bbox(self, target: dict = {}, padding_all: int=None):
-        """
-        bbox を広げたり縮めたりする
-        Params:
-            target:
-                dict: {categories_name: scale} の形式で指定する. 複数OK, 
-                sclae: int or float. int の場合は固定pixel, scale は bboxを等倍する
-            padding_all:
-                None でないなら target を無視しして全ての annotation に適用する
-        """
-        logger.info("START")
-        df = self.df_json.copy()
-        if padding_all is not None and type(padding_all) in [float, int]:
-            scale = padding_all
-            if   type(scale) == int:
-                df["annotations_bbox"] = df["annotations_bbox"].apply(lambda x: [x[0] - scale, x[1] - scale, x[2] + 2*scale, x[3] + 2*scale])
-            elif type(scale) == float:
-                df["annotations_bbox"] = df["annotations_bbox"].apply(
-                    lambda x: [x[0] - (x[2] * scale - x[2])/2., x[1] - (x[3] * scale - x[3])/2., x[2] * scale, x[3] * scale]
-                )
-        else:
-            for x in target.keys():
-                dfwk = df[df["categories_name"] == x].copy()
-                scale = target[x]
-                if   type(scale) == int:
-                    dfwk["annotations_bbox"] = dfwk["annotations_bbox"].apply(lambda x: [x[0] - scale, x[1] - scale, x[2] + 2*scale, x[3] + 2*scale])
-                elif type(scale) == float:
-                    dfwk["annotations_bbox"] = dfwk["annotations_bbox"].apply(
-                        lambda x: [x[0] - (x[2] * scale - x[2])/2., x[1] - (x[3] * scale - x[3])/2., x[2] * scale, x[3] * scale]
-                    )
-                df.loc[dfwk.index, "annotations_bbox"] = dfwk["annotations_bbox"].copy()
-        # scale の結果、bbox が画面からはみ出している場合があるので修正する
-        df = self.fix_bbox_value(df)
-        self.df_json = df.copy()
-        logger.info("END")
-
-
-    @classmethod
-    def fix_bbox_value(cls, df: pd.DataFrame) -> pd.DataFrame:
-        ## 参照形式で修正する.
-        df = df.copy()
-        for listwk, w, h in df[["annotations_bbox", "images_width", "images_height"]].values:
-            ### 先に w,h を計算しないと値がおかしくなる
-            if listwk[0] < 0:             listwk[2] = int(listwk[2] + listwk[0]) # 始点xが左側の枠外の場合
-            if listwk[0] + listwk[2] > w: listwk[2] = int(w  - listwk[0]) # 始点xが枠内で始点x+幅が右側の枠外になる場合.
-            if listwk[2] > w:             listwk[2] = int(w)              # それでもまだ大きい場
-            if listwk[1] < 0:             listwk[3] = int(listwk[3] + listwk[1]) # 始点yが下側の枠外の場合
-            if listwk[1] + listwk[3] > h: listwk[3] = int(h  - listwk[1]) # 始点yが枠内で始点y+高さが上側の枠外になる場合.
-            if listwk[3] > h:             listwk[3] = int(h)              # それでもまだ大きい場
-            listwk[0] = 0 if listwk[0] < 0 else listwk[0] # 0 以下は0に
-            listwk[1] = 0 if listwk[1] < 0 else listwk[1]
-        df["annotations_bbox"] = df["annotations_bbox"].apply(lambda x: [int(_x) for _x in x])
-        return df
-
-
-    def padding_image_and_re_annotation(
-        self, add_padding: int, root_image: str, outdir: str, 
-        outfilename: str="output.json", fill_color=(0,0,0,), exist_ok: bool=False, remake: bool=False
-    ):
-        """
-        Params::
-            fill_color: (0,0,0,), など色を指定するか "random" にする
-        """
-        logger.info("START")
-        # annotation をずらず
-        df = self.df_json.copy()
-        df["images_height"] = df["images_height"] + 2 * add_padding
-        df["images_width"]  = df["images_width"]  + 2 * add_padding
-        df["annotations_bbox"] = df["annotations_bbox"].map(lambda x: [_x+(add_padding if i in [0,1] else 0) for i, _x in enumerate(x)]) # x,yにだけadd_paddingを足す
-        df["annotations_segmentation"] = df["annotations_segmentation"].map(lambda x: [[__x+add_padding for __x in _x] for _x in x])
-
-        # 画像を切り抜く
-        root_image = correct_dirpath(root_image)
-        outdir     = correct_dirpath(outdir)
-        makedirs(outdir, exist_ok=exist_ok, remake=remake)
-        for imgname, dfwk in df.groupby(["images_file_name"]):
-            logger.info(f"resize image name: {imgname}")
-            img = cv2.imread(root_image + imgname)
-            img = cv2.copyMakeBorder(
-                img, add_padding, add_padding, add_padding, add_padding,
-                cv2.BORDER_CONSTANT, value=(np.random.randint(0, 255, 3).tolist() if type(fill_color) == str and fill_color == "random" else fill_color),
-            )
-            filepath = outdir + imgname + ".png"
-            # 画像を保存する
-            cv2.imwrite(filepath, img)
-            # coco の 情報 を書き換える
-            df.loc[dfwk.index, "images_file_name"] = os.path.basename(filepath)
-            df.loc[dfwk.index, "images_coco_url" ] = filepath
-        df["images_date_captured"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.df_json = df.copy()
-        self.re_index()
-        with open(outdir + outfilename, "w") as f:
-            f.write(self.to_str_coco_format())
-        logger.info("END")
-
-
-    def crop_image_and_re_annotation(
-        self, crop_by: dict, root_image: str, outfilename: str, 
-        outdir: str="./output_crop_images"
-    ):
-        """
-        crop_by で指定された方法で画像を切り抜いてre_annotationする
-        Params::
-            crop_by:
-                bounding box: {"bbox":["color_cone"]} のように指定
-        """
-        logger.info("START")
-        list_df_ret = []
-        for method in crop_by.keys():
-            df = self.df_json.copy()
-            if method == "bbox":
-                for ann in crop_by[method]:
-                    # annotation 単位でループする
-                    for imgid, (x,y,w,h,) in df[df["categories_name"] == ann][["images_id", "annotations_bbox"]].copy().values:
-                        logger.info(f"image id: {imgid}")
-                        df_ret = df[(df["images_id"] == imgid)].copy()
-                        str_resize = "_".join([str(_y) for _y in [int(x), int(y), int(x+w), int(y+h)]])
-                        df_ret["__resize"] = str_resize # 最後に画像を切り抜くために箱を用意する
-                        bboxwk = [int(x), int(y), 0, 0]
-                        ## height, width
-                        df_ret["images_height"] = int(h)
-                        df_ret["images_width"]  = int(w)
-                        ## bbox の 修正(細かな補正は for文の外で行う)
-                        df_ret["annotations_bbox"] = df_ret["annotations_bbox"].apply(lambda _x: [_y - bboxwk[_i] for _i, _y in enumerate(_x)])
-                        ## segmentation の 修正
-                        ### segmentation : [[x1, y1, x2, y2, ...], [x1', y1', x2', y2', ...], ]
-                        df_ret["annotations_segmentation"] = df_ret["annotations_segmentation"].apply(lambda _x: [[_y - bboxwk[_i%2] for _i, _y in enumerate(_listwk)] for _listwk in _x])
-                        ndf = df_ret["annotations_segmentation"].values # ndarray に渡して参照形式で修正する. ※汚いけど...
-                        for _i in np.arange(ndf.shape[0]):
-                            _list = ndf[_i] # ここでlistのlist[[854, 121, 855, 120, 856, 120, 857, 120, ...], [...]]
-                            for _listwk in _list:
-                                for _j in np.arange(len(_listwk)):
-                                    ### 偶数はx座標, 奇数はy座標
-                                    if _j % 2 == 0:
-                                        _listwk[_j] = 0      if _listwk[_j] < 0      else _listwk[_j]
-                                        _listwk[_j] = int(w) if _listwk[_j] > int(w) else _listwk[_j]
-                                    else:
-                                        _listwk[_j] = 0      if _listwk[_j] < 0      else _listwk[_j]
-                                        _listwk[_j] = int(h) if _listwk[_j] > int(h) else _listwk[_j]
-                        ## Keypoint の修正
-                        if len(df_ret["categories_keypoints"].iloc[0]) > 0:
-                            ndf = df_ret["annotations_keypoints"].values
-                            ndf = np.concatenate([[x] for x in ndf], axis=0)
-                            ndf = ndf.reshape(ndf.shape[0], -1, 3)
-                            ndf[:, :, 0] = ndf[:, :, 0] - bboxwk[0] # 切り取り位置を引く
-                            ndf[:, :, 1] = ndf[:, :, 1] - bboxwk[1] # 切り取り位置を引く
-                            ndf[:, :, 2][ndf[:, :, 0] <= 0] = 0 # はみ出したKeypointはvisを0にする
-                            ndf[:, :, 2][ndf[:, :, 1] <= 0] = 0 # はみ出したKeypointはvisを0にする
-                            ndf[:, :, 0][ndf[:, :, 2] == 0] = 0 # vis=0のkeypointはx, y を 0 にする
-                            ndf[:, :, 1][ndf[:, :, 2] == 0] = 0 # vis=0のkeypointはx, y を 0 にする
-                            ndf_nkpts = (ndf[:, :, 2] > 0).sum(axis=1).reshape(-1)
-                            ndf = ndf.reshape(ndf.shape[0], -1)
-                            sewk = pd.Series(dtype=object)
-                            for i, index in enumerate(df_ret.index): sewk[str(index)] = ndf[i].tolist()
-                            sewk.index = df_ret.index.copy()
-                            df_ret["annotations_keypoints"]     = sewk
-                            df_ret["annotations_num_keypoints"] = ndf_nkpts.tolist()
-                        list_df_ret.append(df_ret.copy())
-        df_ret = pd.concat(list_df_ret, axis=0, ignore_index=True, sort=False)
-        # bbox の枠外などの補正
-        ## 始点が枠外は除外
-        boolwk = (df_ret["annotations_bbox"].map(lambda x: x[0]) >= df_ret["images_width"]) | (df_ret["annotations_bbox"].map(lambda x: x[1]) >= df_ret["images_height"])
-        df_ret = df_ret.loc[~boolwk, :]
-        ## 終点が枠外は除外
-        boolwk = (df_ret["annotations_bbox"].map(lambda x: x[0]+x[2]) <= 0) | (df_ret["annotations_bbox"].map(lambda x: x[1]+x[3]) <= 0)
-        df_ret = df_ret.loc[~boolwk, :]
-        ## ndarray に渡して参照形式で修正する. ※汚いけど...
-        ndf, ndf_w, ndf_h = df_ret["annotations_bbox"].values, df_ret["images_width"].values, df_ret["images_height"].values 
-        for i in np.arange(ndf.shape[0]):
-            listwk = ndf[i]
-            ### 先に w,h を計算しないと値がおかしくなる
-            if listwk[0] < 0:                    listwk[2] = int(listwk[2] + listwk[0]) # 始点xが左側の枠外の場合
-            if listwk[0] + listwk[2] > ndf_w[i]: listwk[2] = int(ndf_w[i]  - listwk[0]) # 始点xが枠内で始点x+幅が右側の枠外になる場合.
-            if listwk[2] > ndf_w[i]:             listwk[2] = int(ndf_w[i])              # それでもまだ大きい場
-            if listwk[1] < 0:                    listwk[3] = int(listwk[3] + listwk[1]) # 始点yが下側の枠外の場合
-            if listwk[1] + listwk[3] > ndf_h[i]: listwk[3] = int(ndf_h[i]  - listwk[1]) # 始点yが枠内で始点y+高さが上側の枠外になる場合.
-            if listwk[3] > ndf_h[i]:             listwk[3] = int(ndf_h[i])              # それでもまだ大きい場
-            listwk[0] = 0 if listwk[0] < 0 else listwk[0] # 0 以下は0に
-            listwk[1] = 0 if listwk[1] < 0 else listwk[1]
-
-        # 画像を切り抜く. 新しい画像を作成し、名前を変える
-        root_image = correct_dirpath(root_image)
-        outdir     = correct_dirpath(outdir)
-        makedirs(outdir, exist_ok=True, remake=True)
-        for (imgname, str_resize,), dfwk in df_ret.groupby(["images_file_name", "__resize"]):
-            logger.info(f"resize image name: {imgname}")
-            x1, y1, x2, y2 = [int(x) for x in str_resize.split("_")]
-            img = cv2.imread(root_image + imgname)
-            img = img[y1:y2, x1:x2, :]
-            filepath = outdir + imgname + "." + str_resize + ".png"
-            # 画像を保存する
-            cv2.imwrite(filepath, img)
-            # coco の 情報 を書き換える
-            df_ret.loc[dfwk.index, "images_file_name"] = os.path.basename(filepath)
-            df_ret.loc[dfwk.index, "images_coco_url" ] = filepath
-        df_ret["images_date_captured"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        df_ret = df_ret.drop(columns=["__resize"])
-
-        # 画面外にはみ出したannotationを修正する
-        ## 細かい修正は↑で行っているので、ここでは bbox = (0, y, 0, h) or (x, 0, w, 0) になっている行を省く
-        boolwk = np.array([False] * df_ret.shape[0])
-        boolwk = boolwk | (( df_ret["annotations_bbox"].map(lambda x: x[0]) == 0 ) & ( df_ret["annotations_bbox"].map(lambda x: x[2]) == 0 ))
-        boolwk = boolwk | (( df_ret["annotations_bbox"].map(lambda x: x[1]) == 0 ) & ( df_ret["annotations_bbox"].map(lambda x: x[3]) == 0 ))
-        df_ret = df_ret.loc[~boolwk, :] 
-
-        self.df_json = df_ret.copy()
-        self.re_index()
-
-        with open(outdir + outfilename, "w") as f:
-            f.write(self.to_str_coco_format())
-        
-        logger.info("END")
-
 
     def split_validation_data(self, path_json_train: str, path_json_valid: str, size: float=0.1):
         df = self.df_json.copy()

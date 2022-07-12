@@ -1,4 +1,4 @@
-import os, glob, re, shutil
+import os, glob, re, shutil, itertools, copy
 from typing import List, Union
 
 
@@ -8,6 +8,7 @@ __all__ =[
     "correct_dirpath",
     "makedirs",
     "get_file_list",
+    "convert_1d_array",
 ]
 
 
@@ -61,3 +62,26 @@ def get_file_list(dirpath: str, regex_list: List[str]=[]) -> List[str]:
     for regstr in regex_list:
         file_list += list(filter(lambda x: len(re.findall(regstr, x)) > 0, file_list_org))
     return file_list if len(regex_list) > 0 else file_list_org
+
+def convert_1d_array(arrays: List[object]):
+    """
+    Usage::
+        >>> convert_1d_array([1,2,3, [[1,1,23],2,3]])
+        [1, 2, 3, 1, 1, 23, 2, 3]
+    """
+    arrays = copy.deepcopy(arrays)
+    for i, x in enumerate(arrays):
+        if not (isinstance(x, list) or isinstance(x, tuple)):
+            arrays[i] = [x]
+    arrays = list(itertools.chain.from_iterable(arrays))
+    i = 0
+    if len(arrays) > 0:
+        while(1):
+            if isinstance(arrays[i], list) or isinstance(arrays[i], tuple):
+                arrays = convert_1d_array(arrays)
+                i = 0
+            else:
+                i += 1
+            if len(arrays) == i:
+                break
+    return arrays

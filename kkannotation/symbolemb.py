@@ -41,20 +41,27 @@ class SymbolEmbedding:
             self.canvas = partial(self.create_canvas, height=canvas["height"], width=canvas["width"], range_noise=canvas["range_noise"])
         else:
             self.backgrounds = glob.glob(canvas["path"])
-            self.canvas      = lambda: cv2.imread(self.backgrounds[np.random.randint(0, len(self.backgrounds))])
+            self.canvas      = partial(
+                self.create_canvas_from_image, path=self.backgrounds, 
+                height=canvas.get("height"), width=canvas.get("width")
+            )
         self.labels      = []
         self.labels_name = []
-        for dictwk in copy.deepcopy(labels):
-            assert isinstance(dictwk.get("name"), str)
-            dictwk["img"] = cv2.imread(dictwk["path"], cv2.IMREAD_UNCHANGED)
-            if "mask" in dictwk:
-                dictwk["mask"] = cv2.imread(dictwk["mask"])
-            else:
-                dictwk["mask"] = __class__.get_mask(dictwk["img"], thre=dictwk.get("thre"))
-            if dictwk["img"].shape[-1] == 4:
-                dictwk["img"] = dictwk["img"][:, :, :3]
-            self.labels.append(dictwk)
-            self.labels_name.append(dictwk["name"])
+        for dict_label in copy.deepcopy(labels):
+            assert isinstance(dict_label.get("name"), str)
+            paths = glob.glob(dict_label["path"])
+            if len(paths) > 1: assert "mask" not in dict_label
+            for path in paths:
+                dictwk = copy.deepcopy(dict_label)
+                dictwk["img"] = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+                if "mask" in dictwk:
+                    dictwk["mask"] = cv2.imread(dictwk["mask"])
+                else:
+                    dictwk["mask"] = __class__.get_mask(dictwk["img"], thre=dictwk.get("thre"))
+                if dictwk["img"].shape[-1] == 4:
+                    dictwk["img"] = dictwk["img"][:, :, :3]
+                self.labels.append(dictwk)
+                self.labels_name.append(dictwk["name"])
         self.labels      = np.array(self.labels, dtype=object)
         self.labels_name = np.array(self.labels_name, dtype=object)
     
@@ -147,7 +154,23 @@ class SymbolEmbedding:
         assert isinstance(width,  int)
         range_noise = __class__.convert_color_range(range_noise, iters=(height * width)).reshape(height, width, 3)
         return range_noise.astype(np.uint8)
-    
+
+    @classmethod
+    def create_canvas_from_image(cls, path: str=None, height: int=None, width: int=None):
+        if isinstance(path, list):
+            path = path[np.random.randint(0, len(path))]
+        assert isinstance(path, str)
+        if height is not None:
+            assert isinstance(height, int)
+            assert isinstance(width,  int)
+        img  = cv2.imread(path)
+        if height is not None:
+            h, w = img.shape[:2]
+            h    = np.random.randint(0, h - height) if (h - height) > 0 else 0
+            w    = np.random.randint(0, w - width ) if (w - width ) > 0 else 0
+            img  = img[h:h+height, w:w+width]
+        return img
+
     @classmethod
     def rotate_affine(cls, img: np.ndarray, angle: int, is_adjust_border: bool=False, center=None, color=[0, 0, 0]):
         assert center is None or (check_type_list(center, int) and len(center) == 2)
@@ -243,15 +266,15 @@ class SymbolEmbedding:
     
     @classmethod
     def create_zero_imgs(cls, height: int=None, width: int=None, iters: int=None, color_init: List[int]=[255, 255, 255]):
-        img = np.zeros((iters, height, width, 3)).astype(np.uint8)
+        img = np.zeros((iters, height, width, 3), dtype=np.uint8)
         for i, x in enumerate(color_init): img[:, :, :, i] = x
         return img.astype(np.uint8)
 
     @classmethod
     def draw_text(
-        cls, height: int=None, width: int=None, iters: int=None, color_init=None, chars: Union[str, List[str]]=None, range_scale: List[int]=[0.5, 2.0], 
-        range_thickness: List[int]=[1, 3], range_color: Union[List[int], List[List[int]]]=[255, 255], 
-        range_rotation: List[int]=[-20, 20], is_PIL: bool=False, font_pil: str=None, n_merge: int=1
+        cls, height: int=None, width: int=None, iters: int=None, color_init=None, chars: Union[str, List[str]]=None, n_connect: int=1,
+        range_scale: List[int]=[0.5, 2.0], range_thickness: List[int]=[1, 3], range_color: Union[List[int], List[List[int]]]=[255, 255], 
+        range_rotation: List[int]=[-20, 20], is_PIL: bool=False, font_pil: str=None, is_hanko: bool=False, n_merge: int=1
     ):
         assert isinstance(iters, int) and iters >= 0
         if iters == 0: return []
@@ -259,6 +282,7 @@ class SymbolEmbedding:
         assert isinstance(width,  int)
         if isinstance(chars, str): chars = list(chars)
         assert check_type_list(chars, str)
+        assert isinstance(n_connect, int) and n_connect > 0
         assert check_type_list(range_scale, [int, float]) and len(range_scale)    == 2 and range_scale[0]    <= range_scale[1]
         assert check_type_list(range_rotation, int)       and len(range_rotation) == 2 and range_rotation[0] <= range_rotation[1]
         if is_PIL:
@@ -266,23 +290,30 @@ class SymbolEmbedding:
             assert isinstance(font_pil, str)
         else: assert check_type_list(range_thickness, int) and len(range_thickness) == 2 and range_thickness[0] <= range_thickness[1]
         assert isinstance(n_merge, int) and n_merge >= 1 and (iters % n_merge == 0)
-        range_color      = __class__.convert_color_range(range_color, iters=iters).tolist()
-        img              = __class__.create_zero_imgs(height=height, width=width, iters=iters, color_init=color_init)
-        chars            = np.array(chars).copy()
-        chars            = chars[np.random.randint(0, chars.shape[0], iters)]
-        range_scale      = np.arange(range_scale[0], range_scale[1], (range_scale[1] - range_scale[0])/100.0)
-        range_scale      = range_scale[np.random.randint(0, range_scale.shape[0], iters)]
-        range_thickness  = np.arange(range_thickness[0], range_thickness[1], 1)
-        range_thickness  = range_thickness[np.random.randint(0, range_thickness.shape[0], iters)]
-        range_rotation   = np.arange(range_rotation[0], range_rotation[1]+1, 1)
-        range_rotation   = range_rotation[np.random.randint(0, range_rotation.shape[0], iters)]
-        loc_x            = np.random.randint(0, width,  iters).tolist()
-        loc_y            = np.random.randint(0, height, iters).tolist()
-        list_imgs        = []
-        list_imgs_tmp    = []
+        range_color     = __class__.convert_color_range(range_color, iters=iters).tolist()
+        img             = __class__.create_zero_imgs(height=height, width=width, iters=iters, color_init=color_init)
+        chars           = np.array(chars).copy()
+        indexes         = np.random.randint(0, chars.shape[0], (n_connect, iters))
+        chars           = np.vectorize(lambda *x: "".join(x))(*[chars[index] for index in indexes])   
+        range_scale     = np.arange(range_scale[0], range_scale[1], (range_scale[1] - range_scale[0])/100.0)
+        range_scale     = range_scale[np.random.randint(0, range_scale.shape[0], iters)]
+        range_thickness = np.arange(range_thickness[0], range_thickness[1], 1)
+        range_thickness = range_thickness[np.random.randint(0, range_thickness.shape[0], iters)]
+        range_rotation  = np.arange(range_rotation[0], range_rotation[1]+1, 1)
+        range_rotation  = range_rotation[np.random.randint(0, range_rotation.shape[0], iters)]
+        loc_x           = np.random.randint(0, width,  iters).tolist()
+        loc_y           = np.random.randint(0, height, iters).tolist()
+        list_imgs       = []
+        list_imgs_tmp   = []
         for i in np.arange(iters):
             loc = [loc_x[i], loc_y[i]]
-            if is_PIL:
+            if is_hanko:
+                tmp_h   = __class__.draw_hanko(chars[i], font_pil, basesize=int(range_scale[i]), color=tuple(range_color[i]), color_init=color_init)
+                tmp     = img[i]
+                tmp_h_w = min(tmp_h.shape[0], width  - loc[0])
+                tmp_h_h = min(tmp_h.shape[1], height - loc[1])
+                tmp[loc[1]:loc[1]+tmp_h_h, loc[0]:loc[0]+tmp_h_w, :] = tmp_h[:tmp_h_h, :tmp_h_w, :]
+            elif is_PIL:
                 tmp     = cv2pil(img[i])
                 draw    = ImageDraw.Draw(tmp)
                 fontPIL = ImageFont.truetype(font=font_pil, size=int(range_scale[i]))
@@ -314,6 +345,33 @@ class SymbolEmbedding:
                 list_imgs.append(tmp)
         return list_imgs
     
+    @classmethod
+    def draw_hanko(cls, text: str, font_pil: str, basesize: int=50, is_vertical: bool=True, thickness: int=2, color=None, color_init=None, padding: int=1):
+        if basesize % 2 == 1: basesize += 1
+        text     = text.replace("\n", "")
+        if is_vertical:
+            img  = __class__.create_zero_imgs(height=(basesize * len(text)), width=basesize, iters=1, color_init=color_init)[0]
+            text = "\n".join(list(text))
+        else:
+            img  = __class__.create_zero_imgs(height=basesize, width=(basesize * len(text)), iters=1, color_init=color_init)[0]
+        tmp      = cv2pil(img)
+        draw     = ImageDraw.Draw(tmp)
+        fontPIL  = ImageFont.truetype(font=font_pil, size=basesize)
+        draw.text(
+            xy=(0, 0),
+            text=text,
+            fill=color,
+            font=fontPIL
+        )
+        tmp = tmp.resize((basesize, basesize))
+        tmp = pil2cv(tmp)
+        img = __class__.create_zero_imgs(height=(basesize * 2), width=(basesize * 2), iters=1, color_init=color_init)[0]
+        img[basesize//2:basesize//2+tmp.shape[0], basesize//2:basesize//2+tmp.shape[1], :] = tmp
+        r   = int((((basesize//2) ** 2) * 2) ** (1/2))
+        img = cv2.circle(img, (basesize, basesize), r, color, thickness=thickness)
+        margin = max(basesize - r - padding, 1)
+        return img[margin:-margin, margin:-margin, :]
+
     @classmethod
     def draw_shape_line(
         cls, height: int=None, width: int=None, iters: int=None, color_init=None, range_thickness: List[int]=[1, 3], 
@@ -480,25 +538,13 @@ class SymbolEmbedding:
         assert check_type_list(range_scale, [int, float]) and len(range_scale) == 2 and range_scale[0] <= range_scale[1]
         if n_merge is None: n_merge = 1
         assert isinstance(n_merge, int) and n_merge >= 1 and (iters % n_merge == 0)
-        img        = __class__.create_zero_imgs(height=height, width=width, iters=iters, color_init=color_init)
-        mask       = np.zeros((iters, height, width)).astype(np.uint8)
-        indexes    = np.random.randint(0, len(imgs_label), iters)
-        imgs_label = np.array(imgs_label + [np.zeros(0)], dtype=object) # Prevent unification with np.ndarray
-        imgs_label = imgs_label[indexes]
-        imgs_mask  = np.array(imgs_mask + [np.zeros(0)], dtype=object) # Prevent unification with np.ndarray
-        imgs_mask  = imgs_mask[indexes]
-        if range_noise is not None:
-            assert (check_type_list(range_noise, int) and len(range_noise) == 2) or (check_type_list(range_noise, list, int) and len(range_noise) == 3)
-            if len(range_noise) == 2:
-                noise = np.random.randint(*range_noise, (iters, height, width, 1))
-                noise = np.concatenate([noise, noise, noise], axis=-1)
-            else:
-                noise = [np.random.randint(x_min, x_max, (iters, height, width, 1)) for x_min, x_max in range_noise]
-                noise = np.concatenate(noise, axis=-1)
-            img = (img.astype(np.int16) + noise.astype(np.int16))
-            img[img < 0]    = 0
-            img[img >= 256] = 255
-            img = img.astype(np.uint8)
+        img         = __class__.create_zero_imgs(height=height, width=width, iters=iters, color_init=color_init)
+        mask        = np.zeros((iters, height, width)).astype(np.uint8)
+        indexes     = np.random.randint(0, len(imgs_label), iters)
+        imgs_label  = np.array([x.copy() for x in imgs_label] + [np.zeros(0)], dtype=object) # Prevent unification with np.ndarray
+        imgs_label  = imgs_label[indexes]
+        imgs_mask   = np.array([x.copy() for x in imgs_mask ] + [np.zeros(0)], dtype=object) # Prevent unification with np.ndarray
+        imgs_mask   = imgs_mask[indexes]
         range_scale = np.arange(range_scale[0], range_scale[1], (range_scale[1] - range_scale[0])/100.0)
         if is_fix_scale_ratio:
             range_scale = range_scale[np.random.randint(0, range_scale.shape[0], iters)]
@@ -523,6 +569,18 @@ class SymbolEmbedding:
             img[ i, p1_y:p1_y+imgs_label[i].shape[0], p1_x:p1_x+imgs_label[i].shape[1], :] = imgs_label[i]
             mask[i, p1_y:p1_y+imgs_mask[ i].shape[0], p1_x:p1_x+imgs_mask[ i].shape[1]]    = imgs_mask[i]
         mask = (mask > 0)
+        if range_noise is not None:
+            assert (check_type_list(range_noise, int) and len(range_noise) == 2) or (check_type_list(range_noise, list, int) and len(range_noise) == 3)
+            if len(range_noise) == 2:
+                noise = np.random.randint(*range_noise, (iters, height, width, 1))
+                noise = np.concatenate([noise, noise, noise], axis=-1)
+            else:
+                noise = [np.random.randint(x_min, x_max, (iters, height, width, 1)) for x_min, x_max in range_noise]
+                noise = np.concatenate(noise, axis=-1)
+            img = (img.astype(np.int16) + noise.astype(np.int16))
+            img[img < 0]    = 0
+            img[img >= 256] = 255
+            img = img.astype(np.uint8)
         if n_merge > 1:
             # in this case, indexes does not make sense
             list_img, list_mask, tmp, tmp_m = [], [], None, None
