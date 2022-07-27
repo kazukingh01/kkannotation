@@ -3,9 +3,10 @@ import pandas as pd
 import numpy as np
 import cv2
 from typing import List, Union
+from tqdm import tqdm
 
 # local package
-from kkannotation.util.image import draw_annotation
+from kkannotation.util.image import draw_annotation, fit_resize
 from kkannotation.util.com import check_type, check_type_list, correct_dirpath, makedirs
 from kkannotation.util.logger import set_logger
 logger = set_logger(__name__)
@@ -206,7 +207,8 @@ class CocoManager:
         self._list_se.append(se)
     
     def concat_added(self):
-        self.df_json = pd.concat(self._list_se, ignore_index=True, sort=False, axis=1).T
+        if len(self._list_se) > 0:
+            self.df_json = pd.concat(self._list_se, ignore_index=True, sort=False, axis=1).T
         self.re_index()
 
     @classmethod
@@ -305,26 +307,34 @@ class CocoManager:
             "annotations_num_keypoints", "licenses_id", "categories_id"
         ]:
             self.df_json[x] = self.df_json[x].astype(int)
+        # classes for drawing
+        self._classes = self.df_json["categories_name"].unique()
 
-    def organize_segmentation(self):
+    def organize_segmentation(self, min_point: int=1):
         """
         When using Segmentation annotations for augmentation, the
         If you have a weird annotation, you will get an error, so you need to add a function
         """
-        ndf_json  = self.df_json.values.copy()
-        index_seg = np.where(self.df_json.columns == "annotations_segmentation")[0].min()
-        index_w   = np.where(self.df_json.columns == "images_width")[0].min()
-        index_h   = np.where(self.df_json.columns == "images_height")[0].min()
-        for i, (h, w, list_seg,) in enumerate(ndf_json[:, [index_h, index_w, index_seg]]):
-            ndf = np.zeros((int(h), int(w), 3)).astype(np.uint8)
-            re_seg = []
-            for seg in list_seg:
+        df = []
+        for i in tqdm(range(self.df_json.shape[0])):
+            se = self.df_json.iloc[i].copy()
+            polygons = []
+            assert check_type_list(se["annotations_segmentation"], list, [int, float])
+            for polygon in se["annotations_segmentation"]:
+                if len(polygon) < min_point: continue
+                img = np.zeros((int(se["images_height"]), int(se["images_width"]), 3), dtype=np.uint8)
                 # Draw segmentation by connecting lines.
-                ndf = cv2.polylines(ndf, [np.array(seg).reshape(-1,1,2).astype(np.int32)], True, (255,255,255))
+                img = cv2.polylines(img, [np.array(polygon).reshape(-1,1,2).astype(np.int32)], True, (255,255,255))
                 # Draw a line and then get the outermost contour
-                contours, _ = cv2.findContours(ndf[:, :, 0], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-                re_seg.append(contours[0].reshape(-1).astype(int).tolist())
-            ndf_json[i, index_seg] = re_seg
+                contours, _ = cv2.findContours(img[:, :, 0], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+                polygon = contours[0].reshape(-1).astype(int).tolist()
+                if len(polygon) < min_point: continue
+                polygons.append(polygon)
+            se["annotations_segmentation"] = polygons
+            df.append(se)
+        self.df_json = pd.concat(df, axis=1).T
+        self.df_json = self.df_json.loc[self.df_json["annotations_segmentation"].apply(lambda x: len(x)) > 0]
+        self.re_index()
 
     def add_json(self, src: Union[str, dict], root_dir: str=None, is_add_df: bool=True):
         """
@@ -487,10 +497,11 @@ class CocoManager:
             f.write(self.to_str_coco_format())
     
     def draw_annotations(
-        self, src: Union[int, str], imgpath: str=None, is_draw_name: bool=False, is_show: bool=True, save_path: str=None
+        self, src: Union[int, str], imgpath: str=None, is_draw_name: bool=False, is_show: bool=True, save_path: str=None, resize: int=None,
     ) -> np.ndarray:
         assert check_type(src, [int, str])
         assert save_path is None or isinstance(save_path, str)
+        assert resize is None or isinstance(resize, int) and resize > 100
         df = None
         if   isinstance(src, int): df = self[src]
         elif isinstance(src, str): df = self.df_json[self.df_json["images_file_name"] == src].copy()
@@ -500,6 +511,10 @@ class CocoManager:
             logger.raise_error(f"img file: {imgpath} is not exist.")
         for i in np.arange(df.shape[0]):
             se  = df.iloc[i]
+            if hasattr(self, "_classes"):
+                color_id = int(np.where(self._classes == se["categories_name"])[0][0])
+            else:
+                color_id = None
             img = draw_annotation(
                 img, bbox=se["annotations_bbox"], 
                 catecory_name=(se['categories_name'] if is_draw_name else None),
@@ -507,7 +522,10 @@ class CocoManager:
                 keypoints=se["annotations_keypoints"],
                 keypoints_name=(se['categories_keypoints'] if is_draw_name else None),
                 keypoints_skeleton=(se['categories_skeleton'] if is_draw_name else None),
+                color_id=color_id
             )
+        if resize is not None:
+            img = fit_resize(img, "y", resize)
         if is_show:
             cv2.imshow("sample", img)
             cv2.waitKey(0)
