@@ -113,7 +113,7 @@ class Labelme2Coco:
                 super_category_name=None, segmentations=segs, area=area,
                 keypoints=kpts, category_name_kpts=self.keypoints,
             )
-            df = df.append(se, ignore_index=True)
+            df = pd.concat([df, pd.DataFrame(se).T], ignore_index=True, axis=0)
         return df
 
     def to_coco_manager(self) -> CocoManager:
