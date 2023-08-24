@@ -398,7 +398,7 @@ class CocoManager:
     def remove_keypoints(self, list_key_names: List[str], list_key_skeleton:List[List[str]]):
         """
         Params::
-            list_key_names: 残すKeypointの名前のList
+            list_key_names: list of keypoints' names you want to remain
         """
         df = self.df_json.copy()
         df["annotations_keypoints"] = df[["annotations_keypoints","categories_keypoints"]].apply(
@@ -715,5 +715,5 @@ class CocoManager:
         self.df_json = df_valid
         self.re_index()
         self.save(path_json_valid)
-        # 元に戻す
+        # back it previous df
         self.df_json = df

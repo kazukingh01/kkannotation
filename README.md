@@ -12,6 +12,5 @@ pip install git+https://github.com/kazukingh01/kkannotation.git@v1.0.0
 mkdir work
 cd ./work
 git clone https://github.com/kazukingh01/kkannotation.git
-cd ./kkannotation/tests/
-python coco_manager.py
+python kkannotation/tests/coco/coco_manager.py
 ```

@@ -1,5 +1,4 @@
 import copy, glob
-import enum
 from typing import List, Union
 from functools import partial
 import numpy as np
