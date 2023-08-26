@@ -300,6 +300,9 @@ class CocoManager:
                 skeleton[skeleton == x] = i
             skeleton = skeleton.astype(int)
             self.df_json["categories_skeleton"] = self.df_json["categories_skeleton"].apply(lambda x: skeleton.tolist())
+        # fill Nan
+        self.df_json["annotations_num_keypoints"] = self.df_json["annotations_num_keypoints"].fillna(0)
+        self.df_json.loc[self.df_json["annotations_keypoints"].isna(), "annotations_keypoints"] = self.df_json.loc[self.df_json["annotations_keypoints"].isna(), "annotations_keypoints"].apply(lambda x: [])
         # convert type
         for x in [
             "images_id", "images_height", "images_width", "images_license", 
@@ -456,9 +459,12 @@ class CocoManager:
         self.re_index()
 
     @classmethod
-    def __to_str_coco_format(cls, df_json: pd.DataFrame) -> str:
+    def __to_str_coco_format(cls, df_json: pd.DataFrame, is_remove_tag: bool=False) -> str:
         assert isinstance(df_json, pd.DataFrame)
         json_dict = {"info": coco_info()}
+        if is_remove_tag:
+            if df_json["annotations_num_keypoints"].sum() == 0:
+                df_json = df_json.loc[:, ~df_json.columns.isin(["annotations_keypoints", "annotations_num_keypoints"])]
         for _name in ["images", "annotations", "licenses", "categories"]:
             df = df_json.loc[:, df_json.columns.str.contains("^"+_name+"_", regex=True)].copy()
             df.columns = df.columns.str[len(_name+"_"):]
@@ -467,10 +473,10 @@ class CocoManager:
         strjson = json.dumps(json_dict)
         return strjson.replace('"%%null%%"', 'null')
 
-    def to_str_coco_format(self) -> str:
-        return self.__to_str_coco_format(self.df_json.copy())
+    def to_str_coco_format(self, is_remove_tag: bool=False) -> str:
+        return self.__to_str_coco_format(self.df_json.copy(), is_remove_tag=is_remove_tag)
 
-    def save(self, filepath: str, save_images_path: str=None, exist_ok: bool=False, remake: bool=False):
+    def save(self, filepath: str, save_images_path: str=None, is_remove_tag: bool=False, exist_ok: bool=False, remake: bool=False):
         """
         save coco format json file.
         Params::
@@ -494,7 +500,7 @@ class CocoManager:
             self.df_json["images_coco_url"] = save_images_path + self.df_json["images_file_name"]
             self.re_index()
         with open(filepath, "w") as f:
-            f.write(self.to_str_coco_format())
+            f.write(self.to_str_coco_format(is_remove_tag=is_remove_tag))
     
     def draw_annotations(
         self, src: Union[int, str], imgpath: str=None, is_draw_name: bool=False, is_show: bool=True, save_path: str=None, resize: int=None,

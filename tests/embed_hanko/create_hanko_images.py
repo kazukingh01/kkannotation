@@ -266,6 +266,13 @@ names1 = [x+"　"+y for x in list_last_name for y in list_first_name]
 names2 = [x+" "+y for x in list_last_name for y in list_first_name]
 names3 = [x+y for x in list_last_name for y in list_first_name]
 
+def name_bg(chars=None, iters=25):
+    return SymbolEmbedding.draw_text(
+        height=800, width=800, iters=iters, color_init=[255, 255, 255], chars=chars, n_connect=1,
+        range_scale=[15, 20], range_thickness=[1, 3], range_color=[0, 50],
+        range_rotation=[-20, 20], is_PIL=True, font_pil=f"/{kkannotation.__path__[0]}/font/ipaexg.ttf",
+        is_hanko=False, padding_loc=100, n_merge=1
+    )
 
 def name_label(chars=None, iters=25):
     imgs  = SymbolEmbedding.draw_text(
@@ -285,16 +292,20 @@ if __name__ == "__main__":
     makedirs(dirname, exist_ok=True, remake=True)
     with open("./config_hanko.json") as f: config = json.load(f)
     emb = SymbolEmbedding(**config)
-    emb.procs_label.append(partial(name_label, chars=names1, iters=10))
-    emb.procs_label.append(partial(name_label, chars=names2, iters=10))
-    emb.procs_label.append(partial(name_label, chars=names3, iters=10))
-    emb.procs_label.append(partial(name_label, chars=list_last_name, iters=20))
-    Parallel(n_jobs=8, backend="loky", verbose=10)([
+    emb.procs_draw.append(partial(name_bg, chars=names1, iters=10))
+    emb.procs_draw.append(partial(name_bg, chars=names2, iters=10))
+    emb.procs_draw.append(partial(name_bg, chars=names3, iters=10))
+    emb.procs_draw.append(partial(name_bg, chars=list_last_name, iters=20))
+    # emb.procs_label.append(partial(name_label, chars=names1, iters=10))
+    # emb.procs_label.append(partial(name_label, chars=names2, iters=10))
+    # emb.procs_label.append(partial(name_label, chars=names3, iters=10))
+    # emb.procs_label.append(partial(name_label, chars=list_last_name, iters=20))
+    Parallel(n_jobs=32, backend="loky", verbose=10)([
         delayed(lambda x, y: x.create_image(y, is_save=True))(
             emb, f"./{dirname}/train{i}.png"
-        ) for i in range(50)
+        ) for i in range(400)
     ])
     coco = CocoManager()
     coco.add_jsons(glob.glob(f"./{dirname}/*.json"), root_dir=dirname)
     coco.organize_segmentation(min_point=6)
-    coco.save("./coco_hanko.json")
+    coco.save("./coco_hanko.json", is_remove_tag=True)
