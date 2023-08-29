@@ -1,4 +1,4 @@
-import json, glob
+import json, glob, argparse
 import numpy as np
 from joblib import Parallel, delayed
 from functools import partial
@@ -6,6 +6,11 @@ import kkannotation
 from kkannotation.symbolemb import SymbolEmbedding
 from kkannotation.coco import CocoManager
 from kkannotation.util.com import makedirs
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--num", type=int, default=50)
+args = parser.parse_args()
 
 
 list_last_name  = [
@@ -300,10 +305,10 @@ if __name__ == "__main__":
     # emb.procs_label.append(partial(name_label, chars=names2, iters=10))
     # emb.procs_label.append(partial(name_label, chars=names3, iters=10))
     # emb.procs_label.append(partial(name_label, chars=list_last_name, iters=20))
-    Parallel(n_jobs=32, backend="loky", verbose=10)([
+    Parallel(n_jobs=12, backend="loky", verbose=10)([
         delayed(lambda x, y: x.create_image(y, is_save=True))(
             emb, f"./{dirname}/train{i}.png"
-        ) for i in range(400)
+        ) for i in range(args.num)
     ])
     coco = CocoManager()
     coco.add_jsons(glob.glob(f"./{dirname}/*.json"), root_dir=dirname)
